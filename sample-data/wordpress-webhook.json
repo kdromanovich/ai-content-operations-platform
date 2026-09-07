@@ -1,0 +1,14 @@
+{
+  "secret": "SET_AT_RUNTIME",
+  "post_id": 1001,
+  "post": {
+    "ID": 1001,
+    "post_title": "Three practical ways to improve cash-flow visibility",
+    "post_content": "<p>A fictional small business introduces a weekly review, assigns owners to overdue invoices, and tracks payment risks in one dashboard.</p>",
+    "post_status": "publish",
+    "post_permalink": "https://example.com/sample-business-article/"
+  },
+  "post_thumbnail": "https://example.com/wp-content/uploads/sample-business-cover.jpg",
+  "executionMode": "test"
+}
+

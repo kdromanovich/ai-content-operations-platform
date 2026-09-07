@@ -1,0 +1,705 @@
+{
+  "name": "02 | Web Source Ingestion",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "82c8c727-6cb9-5a76-8f6b-426484b53970",
+      "name": "Manual: Start Source Ingestion",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        15712,
+        4592
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "source_id",
+              "name": "source_id",
+              "value": "={{ $json.id }}",
+              "type": "number"
+            },
+            {
+              "id": "channel_name",
+              "name": "source_name",
+              "value": "={{ $json.name }}",
+              "type": "string"
+            },
+            {
+              "id": "8906b375-0745-5fca-836a-86943406513a",
+              "name": "source_url",
+              "value": "={{ $json.source_url }}",
+              "type": "string"
+            },
+            {
+              "id": "source_type",
+              "name": "source_type",
+              "value": "={{ $json.source_type || $json.platform || (String($json.source_url || '').includes('t.me') ? 'telegram' : 'website') }}",
+              "type": "string"
+            },
+            {
+              "id": "platform",
+              "name": "platform",
+              "value": "={{ $json.platform || (String($json.source_url || '').includes('t.me') ? 'telegram' : 'website') }}",
+              "type": "string"
+            },
+            {
+              "id": "rss_url",
+              "name": "rss_url",
+              "value": "={{ $json.rss_url || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "fetch_url",
+              "name": "fetch_url",
+              "value": "={{ $json.rss_url || $json.source_url }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4ff6b94b-74ff-5705-b476-5831d61378bf",
+      "name": "Set Initial Variables",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        17056,
+        4704
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://t.me/s/{{ $json.source_url.split('/').pop() }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "49003b6b-2583-5850-b805-100000001",
+      "name": "Telegram: Fetch Source Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        17504,
+        4608
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        15712,
+        4784
+      ],
+      "id": "ad144fe2-1a9c-56c2-90cd-32ef0c63ce57",
+      "name": "Scheduled Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "content_sources",
+        "returnAll": true,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "is_active",
+              "condition": "eq",
+              "keyValue": "true"
+            },
+            {
+              "keyName": "theme_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Active Theme').first().json.id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        16608,
+        4704
+      ],
+      "id": "6a6142df-1a75-5131-b156-3127a6d55cbf",
+      "name": "Load Source Registry"
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "posts",
+              "cssSelector": ".tgme_widget_message",
+              "returnValue": "html",
+              "returnArray": true
+            },
+            {
+              "key": "subscribers_text",
+              "cssSelector": ".tgme_channel_info_counter"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "12403f3c-f2a8-5ca6-a89d-ce3fa9b40094",
+      "name": "Extract Post Elements",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        17728,
+        4608
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        16832,
+        4704
+      ],
+      "id": "b1de882f-e36d-5ebf-b9bc-5ffa02dfacef",
+      "name": "Loop Over Sources"
+    },
+    {
+      "parameters": {
+        "jsCode": "const theme = $('Get Active Theme').first().json || {};\nconst THEME_ID = Number(theme.id || 0);\nconst THEME_TITLE = String(theme.title || 'theme').trim();\n\nconst THEME_KEYWORDS = Array.isArray(theme.keywords)\n  ? theme.keywords\n  : String(theme.keywords || '')\n      .replace(/[{}\"]/g, '')\n      .split(',')\n      .map(s => s.trim())\n      .filter(Boolean);\n\nconst NEGATIVE_KEYWORDS = Array.isArray(theme.negative_keywords)\n  ? theme.negative_keywords\n  : String(theme.negative_keywords || '')\n      .replace(/[{}\"]/g, '')\n      .split(',')\n      .map(s => s.trim())\n      .filter(Boolean);\n\nconst sourceData = $('Set Initial Variables').first().json;\nconst sourceId = sourceData.source_id;\nconst sourceUrl = sourceData.source_url;\n\nconst inputData = $input.first().json;\nconst inputPosts = inputData.posts || [];\nconst subscribersText = inputData.subscribers_text || '';\n\n// --- НАСТРОЙКИ ---\nconst DAYS_TO_KEEP = 14;\nconst STOP_WORDS = ['erid:', 'реклама', 'подписывайтесь', 'жми сюда', 'промокод', 'скидка', 'партнерский'];\nconst MAX_LINKS = 3;\nconst MAX_POSTS_PER_SOURCE = 20;\n\nfunction normalize(text) {\n  return String(text || '')\n    .toLowerCase()\n    .replace(/ё/g, 'е')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nfunction makeCategory(themeTitle) {\n  const t = normalize(themeTitle);\n  if (t.includes('налог')) return 'tax';\n  return t\n    .replace(/[^a-zа-я0-9]+/gi, '_')\n    .replace(/^_+|_+$/g, '')\n    .slice(0, 50) || 'theme';\n}\n\nconst THEME_CATEGORY = makeCategory(THEME_TITLE);\n\nfunction getMatchedKeywords(text) {\n  const normalized = normalize(text);\n\n  const matched = THEME_KEYWORDS.filter(keyword => {\n    const k = normalize(keyword);\n    return k && normalized.includes(k);\n  });\n\n  const negative = NEGATIVE_KEYWORDS.filter(keyword => {\n    const k = normalize(keyword);\n    return k && normalized.includes(k);\n  });\n\n  return { matched, negative };\n}\n\nconst cutoffDate = new Date();\ncutoffDate.setDate(cutoffDate.getDate() - DAYS_TO_KEEP);\n\n// 1. ПАРСИМ ПОДПИСЧИКОВ\nlet subscribersCount = null;\nif (subscribersText) {\n  const match = subscribersText.match(/([0-9.,KM]+)\\s+subscribers?/i);\n  if (match) {\n    const subsStr = match[1].trim();\n    if (subsStr.includes('K')) subscribersCount = Math.round(parseFloat(subsStr.replace('K', '').replace(',', '.')) * 1000);\n    else if (subsStr.includes('M')) subscribersCount = Math.round(parseFloat(subsStr.replace('M', '').replace(',', '.')) * 1000000);\n    else subscribersCount = parseInt(subsStr.replace(/[^0-9]/g, '')) || null;\n  }\n}\n\nconst posts = [];\n\nfor (const html of inputPosts) {\n  if (posts.length >= MAX_POSTS_PER_SOURCE) break;\n\n  // --- ID ПОСТА ---\n  let postId = null;\n  const footerMatch = html.match(/t\\.me\\/[^\\/]+\\/(\\d+)/);\n  if (footerMatch) postId = footerMatch[1];\n  if (!postId) continue;\n\n  // 🔗 ССЫЛКА\n  let cleanSourceUrl = String(sourceUrl || '').replace('/s/', '/');\n  if (cleanSourceUrl.endsWith('/')) cleanSourceUrl = cleanSourceUrl.slice(0, -1);\n  const externalUrl = `${cleanSourceUrl}/${postId}`;\n\n  // --- ДАТА ---\n  const dateMatch = html.match(/<time datetime=\"([^\"]+)\"/);\n  let publishedAt = null;\n  if (dateMatch) {\n    publishedAt = dateMatch[1];\n    if (new Date(publishedAt) < cutoffDate) continue;\n  } else {\n    continue;\n  }\n\n  // --- ТЕКСТ ---\n  const textMatch = html.match(/<div class=\"tgme_widget_message_text[^>]*>([\\s\\S]*?)<\\/div>/);\n  let rawHtml = textMatch ? textMatch[1] : '';\n\n  let text = rawHtml\n    .replace(/<br\\s*\\/?>/gi, '\\n')\n    .replace(/<b>(.*?)<\\/b>/gi, '**$1**')\n    .replace(/<strong>(.*?)<\\/strong>/gi, '**$1**')\n    .replace(/<i>(.*?)<\\/i>/gi, '_$1_')\n    .replace(/<em>(.*?)<\\/em>/gi, '_$1_')\n    .replace(/<a href=\"([^\"]+)\".*?>(.*?)<\\/a>/gi, '[$2]($1)')\n    .replace(/&quot;/g, '\"')\n    .replace(/&amp;/g, '&')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/<[^>]+>/g, '')\n    .trim();\n\n  // БАЗОВЫЕ ФИЛЬТРЫ\n  if (text.length < 50) continue;\n  if (text.includes('Forwarded from')) continue;\n\n  const lowerText = text.toLowerCase();\n  if (STOP_WORDS.some(word => lowerText.includes(word))) continue;\n\n  const linkCount = (text.match(/http/g) || []).length;\n  const mdLinkCount = (text.match(/\\[.*?\\]\\(.*?\\)/g) || []).length;\n  if (linkCount > MAX_LINKS || mdLinkCount > MAX_LINKS) continue;\n\n  // ФИЛЬТР АКТИВНОЙ ТЕМЫ\n  const { matched, negative } = getMatchedKeywords(`${text} ${externalUrl}`);\n  if (matched.length === 0) continue;\n  if (negative.length > 0) continue;\n\n  let title = text.length <= 100 ? text : text.substring(0, 100) + '...';\n\n  // --- МЕТРИКИ ---\n  let views = 0;\n  const viewsMatch = html.match(/class=[\"']tgme_widget_message_views[\"'][^>]*>([^<]+)<\\/span>/);\n  if (viewsMatch) {\n    const rawViews = viewsMatch[1].trim();\n    if (rawViews.includes('K')) views = Math.round(parseFloat(rawViews.replace('K', '').replace(',', '.')) * 1000);\n    else if (rawViews.includes('M')) views = Math.round(parseFloat(rawViews.replace('M', '').replace(',', '.')) * 1000000);\n    else views = parseInt(rawViews.replace(/[^\\d]/g, '')) || 0;\n  }\n\n  let totalReactions = 0;\n  const countMatches = html.matchAll(/class=[\"']tgme_widget_message_reaction_count[\"'][^>]*>([^<]+)<\\/span>/g);\n  for (const match of countMatches) {\n    const s = match[1].trim();\n    let count = 0;\n    if (s.includes('K')) count = Math.round(parseFloat(s.replace('K','').replace(',','.')) * 1000);\n    else if (s.includes('M')) count = Math.round(parseFloat(s.replace('M','').replace(',','.')) * 1000000);\n    else count = parseInt(s.replace(/[^\\d]/g, '')) || 0;\n    totalReactions += count;\n  }\n\n  let reachRate = 0;\n  if (subscribersCount && subscribersCount > 0 && views > 0) {\n    reachRate = (views / subscribersCount) * 100;\n    reachRate = Math.round(reachRate * 100) / 100;\n  }\n\n  let er = 0;\n  if (views > 0 && totalReactions > 0) {\n    er = (totalReactions / views) * 100;\n    er = Math.round(er * 100) / 100;\n  }\n\n  const images = [];\n  const imageMatches = html.matchAll(/background-image:\\s*url\\(['\"]([^'\"]+)['\"]/g);\n  for (const match of imageMatches) {\n    if (match[1].includes('telesco.pe')) images.push(match[1]);\n  }\n\n  posts.push({\n    post_id: postId,\n    external_url: externalUrl,\n    text,\n    title,\n    published_at: publishedAt,\n    views,\n    images,\n    total_reactions: totalReactions,\n    er,\n    reach_rate: reachRate,\n    category: THEME_CATEGORY,\n    platform: 'telegram',\n    matched_theme_id: THEME_ID,\n    matched_keywords: matched,\n    relevance_score: matched.length,\n    is_theme_relevant: true\n  });\n}\n\n// ЗАЩИТА ОТ ДУБЛЕЙ\nconst uniquePosts = [];\nconst seenIds = new Set();\nfor (const post of posts) {\n  if (!seenIds.has(post.post_id)) {\n    seenIds.add(post.post_id);\n    uniquePosts.push(post);\n  }\n}\n\nreturn [{\n  json: {\n    source_id: Number(sourceId),\n    theme_id: THEME_ID,\n    theme_title: THEME_TITLE,\n    subscribers_count: Number(subscribersCount || 0),\n    posts: Array.isArray(uniquePosts) ? uniquePosts : [],\n    has_posts: Array.isArray(uniquePosts) && uniquePosts.length > 0,\n    reason: uniquePosts.length ? 'telegram_parsed_by_active_theme' : 'telegram_empty_after_theme_filter'\n  }\n}];"
+      },
+      "id": "f83e8a58-e643-5e04-988c-13c22cc0a5b4",
+      "name": "Parse Collected Sources",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        17952,
+        4608
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "system_settings",
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        15936,
+        4704
+      ],
+      "id": "6410a3a5-497b-550e-bccc-d42e7ccb25ef",
+      "name": "Get System Settings"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Собираем все настройки в удобный объект\nconst settings = {};\n\nconst items = $input.all();\n\nitems.forEach(item => {\n  const key = item.json.setting_key;\n  const value = item.json.setting_value;\n  settings[key] = value;\n});\n\n// Возвращаем один объект со всеми настройками\nreturn [{\n  json: {\n    admin_chat_id: settings.admin_chat_id,\n    days_before_ideas: settings.days_before_ideas,\n    supabase_url: settings.supabase_url,\n    default_channel_name: settings.default_channel_name\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16160,
+        4704
+      ],
+      "id": "ed3d76c3-de56-5647-b96b-8deddf5647fc",
+      "name": "Prepare Settings"
+    },
+    {
+      "parameters": {
+        "amount": "={{ Math.floor(Math.random() * 4) + 2 }}"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        19072,
+        4784
+      ],
+      "id": "2e9155a4-566b-5982-8187-2dc861c4ff56",
+      "name": "Wait Between Sources"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Prepare Settings').item.json.supabase_url }}/rest/v1/rpc/cleanup_old_posts",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "{}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        17056,
+        4512
+      ],
+      "id": "1af564a0-4ce7-55e8-bf60-9a5845ef0921",
+      "name": "Clean Old Posts"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "has-posts-condition",
+              "leftValue": "={{ Array.isArray($json.posts) && $json.posts.length > 0 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "63b3b50f-bbc7-5fae-aa4a-97fd697c2f8b",
+      "name": "Has Posts?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        18176,
+        4704
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const clean = (v, fallback = '') => {\n  if (v === null || v === undefined) return fallback;\n  return String(v)\n    .replace(/\\u0000/g, '')\n    .replace(/[\\u0001-\\u001f\u007f]/g, ' ')\n    .trim();\n};\n\nconst body = {\n  source_id: Number($json.source_id),\n  platform: clean($json.platform, 'website'),\n  title: clean($json.title, 'Без названия'),\n  content: clean($json.text || $json.content, 'Без текста'),\n  external_id: Number($json.post_id),\n  external_url: clean($json.external_url),\n  views_count: Number($json.views || 0),\n  likes_count: Number($json.total_reactions || 0),\n  published_at: $json.published_at || null,\n  parsed_at: new Date().toISOString(),\n  metrics_updated_at: new Date().toISOString(),\n  er: Number($json.er || 0),\n  reach_rate: Number($json.reach_rate || 0),\n  category: clean($json.category, 'theme'),\n  matched_theme_id: $json.matched_theme_id ? Number($json.matched_theme_id) : null,\n  matched_keywords: Array.isArray($json.matched_keywords) ? $json.matched_keywords : [],\n  relevance_score: Number($json.relevance_score || 0),\n  is_theme_relevant: $json.is_theme_relevant !== false\n};\n\nreturn [{\n  json: {\n    ...$json,\n    insert_body: JSON.stringify(body)\n  }\n}];"
+      },
+      "id": "e129af7a-f1a3-5cf9-8b15-48bbb4872418",
+      "name": "Build Supabase RPC Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        18624,
+        4640
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Prepare Settings').item.json.supabase_url }}/rest/v1/source_content?on_conflict=source_id,external_id",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.insert_body }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        18848,
+        4640
+      ],
+      "id": "fa8a6c4f-14e3-55c0-aef1-320ad51c7439",
+      "name": "Store Posts via Database RPC"
+    },
+    {
+      "parameters": {
+        "jsCode": "const posts = Array.isArray($json.posts) ? $json.posts : [];\n\nif (posts.length === 0) {\n  return [];\n}\n\nreturn posts.map(post => ({\n  json: {\n    source_id: Number($json.source_id),\n    platform: post.platform || 'website',\n    post_id: Number(post.post_id),\n    external_url: post.external_url,\n    text: post.text || post.content || '',\n    title: post.title || 'Без названия',\n    published_at: post.published_at || null,\n    views: Number(post.views || 0),\n    images: Array.isArray(post.images) ? post.images : [],\n    total_reactions: Number(post.total_reactions || 0),\n    er: Number(post.er || 0),\n    reach_rate: Number(post.reach_rate || 0),\n    category: post.category || 'theme',\n    matched_theme_id: post.matched_theme_id || $json.theme_id || null,\n    matched_keywords: Array.isArray(post.matched_keywords) ? post.matched_keywords : [],\n    relevance_score: Number(post.relevance_score || 0),\n    is_theme_relevant: post.is_theme_relevant !== false\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        18400,
+        4640
+      ],
+      "id": "8b135fd7-283c-5bcf-b8ac-8f2f9b89b51f",
+      "name": "Prepare Database Result"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ ($json.source_type || $json.platform || (String($json.source_url || '').includes('t.me') ? 'telegram' : 'website')).toLowerCase() }}",
+              "value2": "telegram"
+            }
+          ]
+        }
+      },
+      "id": "8c6d9151-2bd9-58e0-aa7d-9d4fd7bb20a8",
+      "name": "Route Source Type",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        17280,
+        4704
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.fetch_url || $json.rss_url || $json.source_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {}
+          },
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 45000
+        }
+      },
+      "id": "34472077-a950-55cf-b75d-9284f7f548e3",
+      "name": "Website: Fetch Source Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        17728,
+        4800
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const theme = $('Get Active Theme').first().json || {};\nconst THEME_ID = Number(theme.id || 0);\nconst THEME_TITLE = String(theme.title || 'theme').trim();\n\nconst THEME_KEYWORDS = Array.isArray(theme.keywords)\n  ? theme.keywords\n  : String(theme.keywords || '')\n      .replace(/[{}\"]/g, '')\n      .split(',')\n      .map(s => s.trim())\n      .filter(Boolean);\n\nconst NEGATIVE_KEYWORDS = Array.isArray(theme.negative_keywords)\n  ? theme.negative_keywords\n  : String(theme.negative_keywords || '')\n      .replace(/[{}\"]/g, '')\n      .split(',')\n      .map(s => s.trim())\n      .filter(Boolean);\n\nconst sourceData = $('Set Initial Variables').first().json;\n\nconst sourceId = Number(sourceData.source_id);\nconst sourceUrl = String(sourceData.source_url || '').trim();\nconst fetchUrl = String(sourceData.fetch_url || sourceData.rss_url || sourceUrl).trim();\nconst sourceName = String(sourceData.source_name || '').trim();\n\nconst input = $input.first().json || {};\nlet raw = input.data ?? input.body ?? input.response ?? input.html ?? '';\n\nif (typeof raw !== 'string') {\n  raw = JSON.stringify(raw);\n}\n\n// Сколько материалов берем с одного RSS/сайта.\n// Если источников 5-10, суммарно получится до 20+ новостей по теме.\nconst MAX_POSTS_PER_SOURCE = 20;\n\nfunction normalize(text) {\n  return String(text || '')\n    .toLowerCase()\n    .replace(/ё/g, 'е')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nfunction makeCategory(themeTitle) {\n  const t = normalize(themeTitle);\n  if (t.includes('налог')) return 'tax';\n  return t\n    .replace(/[^a-zа-я0-9]+/gi, '_')\n    .replace(/^_+|_+$/g, '')\n    .slice(0, 50) || 'theme';\n}\n\nconst THEME_CATEGORY = makeCategory(THEME_TITLE);\n\nfunction decodeHtml(text) {\n  return String(text || '')\n    .replace(/<!\\[CDATA\\[/g, '')\n    .replace(/\\]\\]>/g, '')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/&amp;/g, '&')\n    .replace(/&quot;/g, '\"')\n    .replace(/&#034;/g, '\"')\n    .replace(/&#039;/g, \"'\")\n    .replace(/&apos;/g, \"'\")\n    .replace(/&laquo;/g, '«')\n    .replace(/&raquo;/g, '»')\n    .replace(/&mdash;/g, '—')\n    .replace(/&ndash;/g, '–')\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>');\n}\n\nfunction stripTags(text) {\n  return decodeHtml(String(text || '')\n    .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n    .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n    .replace(/<br\\s*\\/?>/gi, '\\n')\n    .replace(/<\\/p>/gi, '\\n')\n    .replace(/<\\/div>/gi, '\\n')\n    .replace(/<[^>]+>/g, ' ')\n  )\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nfunction getTag(block, tag) {\n  const re = new RegExp(`<${tag}[^>]*>([\\\\s\\\\S]*?)<\\\\/${tag}>`, 'i');\n  const match = block.match(re);\n  return match ? stripTags(match[1]) : '';\n}\n\nfunction getLink(block) {\n  let link = getTag(block, 'link');\n\n  if (!link) {\n    const atom = block.match(/<link[^>]+href=[\"']([^\"']+)[\"']/i);\n    if (atom) link = atom[1];\n  }\n\n  if (!link) {\n    const guid = block.match(/<guid[^>]*>([\\s\\S]*?)<\\/guid>/i);\n    if (guid && guid[1].includes('http')) link = stripTags(guid[1]);\n  }\n\n  return String(link || '').trim();\n}\n\nfunction hashToInt(str) {\n  let hash = 0;\n  const s = String(str || '');\n  for (let i = 0; i < s.length; i++) {\n    hash = ((hash << 5) - hash) + s.charCodeAt(i);\n    hash |= 0;\n  }\n  return Math.abs(hash);\n}\n\nfunction getMatchedKeywords(title, description, url) {\n  const text = normalize(`${title} ${description} ${url}`);\n\n  const matched = THEME_KEYWORDS.filter(keyword => {\n    const k = normalize(keyword);\n    return k && text.includes(k);\n  });\n\n  const negative = NEGATIVE_KEYWORDS.filter(keyword => {\n    const k = normalize(keyword);\n    return k && text.includes(k);\n  });\n\n  return { matched, negative };\n}\n\nfunction makePost({ title, description, url, date }) {\n  title = stripTags(title);\n  description = stripTags(description);\n  url = String(url || '').trim();\n\n  if (!title || title.length < 8) return null;\n  if (!url || !url.startsWith('http')) return null;\n\n  const { matched, negative } = getMatchedKeywords(title, description, url);\n\n  // Главный фильтр тематичности: материал проходит только если нашлось хотя бы 1 ключевое слово активной темы.\n  if (matched.length === 0) return null;\n\n  // Минус-слова темы: реклама, скидки, праздники и т.д.\n  if (negative.length > 0) return null;\n\n  let publishedAt = new Date().toISOString();\n  if (date) {\n    const d = new Date(date);\n    if (!isNaN(d.getTime())) publishedAt = d.toISOString();\n  }\n\n  const text = description ? `${title}\\n\\n${description}` : title;\n\n  return {\n    post_id: hashToInt(url),\n    external_url: url,\n    text,\n    title: title.slice(0, 180),\n    published_at: publishedAt,\n    views: 0,\n    images: [],\n    total_reactions: 0,\n    er: 0,\n    reach_rate: 0,\n    category: THEME_CATEGORY,\n    platform: 'website',\n    matched_theme_id: THEME_ID,\n    matched_keywords: matched,\n    relevance_score: matched.length,\n    is_theme_relevant: true\n  };\n}\n\nfunction parseRss(xml) {\n  const posts = [];\n\n  const itemRe = /<item[\\s\\S]*?<\\/item>/gi;\n  const items = xml.match(itemRe) || [];\n\n  for (const item of items) {\n    if (posts.length >= MAX_POSTS_PER_SOURCE) break;\n\n    const title = getTag(item, 'title');\n    const description = getTag(item, 'description') || getTag(item, 'content:encoded');\n    const url = getLink(item);\n    const date = getTag(item, 'pubDate') || getTag(item, 'dc:date');\n\n    const post = makePost({ title, description, url, date });\n    if (post) posts.push(post);\n  }\n\n  const entryRe = /<entry[\\s\\S]*?<\\/entry>/gi;\n  const entries = xml.match(entryRe) || [];\n\n  for (const entry of entries) {\n    if (posts.length >= MAX_POSTS_PER_SOURCE) break;\n\n    const title = getTag(entry, 'title');\n    const description = getTag(entry, 'summary') || getTag(entry, 'content');\n    const url = getLink(entry);\n    const date = getTag(entry, 'updated') || getTag(entry, 'published');\n\n    const post = makePost({ title, description, url, date });\n    if (post) posts.push(post);\n  }\n\n  return posts;\n}\n\nfunction parseGenericHtml(html) {\n  const posts = [];\n  const linkRe = /<a[^>]+href=[\"']([^\"']+)[\"'][^>]*>([\\s\\S]*?)<\\/a>/gi;\n\n  let m;\n  while ((m = linkRe.exec(html)) !== null && posts.length < MAX_POSTS_PER_SOURCE) {\n    let url = m[1];\n    const title = stripTags(m[2]);\n\n    if (!url.startsWith('http')) {\n      try {\n        url = new URL(url, fetchUrl).toString();\n      } catch (e) {\n        continue;\n      }\n    }\n\n    const post = makePost({\n      title,\n      description: '',\n      url,\n      date: new Date().toISOString()\n    });\n\n    if (post) posts.push(post);\n  }\n\n  return posts;\n}\n\nconst looksLikeRss =\n  raw.includes('<rss') ||\n  raw.includes('<feed') ||\n  raw.includes('<item') ||\n  raw.includes('<entry');\n\nconst posts = looksLikeRss ? parseRss(raw) : parseGenericHtml(raw);\n\n// Убираем дубли внутри одного источника\nconst uniquePosts = [];\nconst seen = new Set();\nfor (const post of posts) {\n  const key = post.external_url || post.post_id;\n  if (seen.has(key)) continue;\n  seen.add(key);\n  uniquePosts.push(post);\n}\n\nreturn [{\n  json: {\n    source_id: sourceId,\n    source_name: sourceName,\n    source_url: sourceUrl,\n    fetch_url: fetchUrl,\n    theme_id: THEME_ID,\n    theme_title: THEME_TITLE,\n    theme_keywords: THEME_KEYWORDS,\n    subscribers_count: 0,\n    posts: uniquePosts,\n    has_posts: uniquePosts.length > 0,\n    reason: uniquePosts.length\n      ? (looksLikeRss ? 'rss_parsed_by_active_theme' : 'html_parsed_by_active_theme')\n      : (looksLikeRss ? 'rss_empty_after_theme_filter' : 'html_empty_after_theme_filter')\n  }\n}];"
+      },
+      "id": "55739ad4-bfbf-50b6-934a-040543eea370",
+      "name": "Parse Website Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        17952,
+        4800
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "content_themes",
+        "limit": 1,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "active"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        16384,
+        4704
+      ],
+      "id": "53165ec0-de3a-5d2a-8996-f70a7b5639cf",
+      "name": "Get Active Theme"
+    }
+  ],
+  "connections": {
+    "Manual: Start Source Ingestion": {
+      "main": [
+        [
+          {
+            "node": "Get System Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Initial Variables": {
+      "main": [
+        [
+          {
+            "node": "Route Source Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram: Fetch Source Page": {
+      "main": [
+        [
+          {
+            "node": "Extract Post Elements",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scheduled Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get System Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Source Registry": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Post Elements": {
+      "main": [
+        [
+          {
+            "node": "Parse Collected Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Sources": {
+      "main": [
+        [
+          {
+            "node": "Clean Old Posts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Initial Variables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Collected Sources": {
+      "main": [
+        [
+          {
+            "node": "Has Posts?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get System Settings": {
+      "main": [
+        [
+          {
+            "node": "Prepare Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Settings": {
+      "main": [
+        [
+          {
+            "node": "Get Active Theme",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Between Sources": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Posts?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Database Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait Between Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Supabase RPC Body": {
+      "main": [
+        [
+          {
+            "node": "Store Posts via Database RPC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Posts via Database RPC": {
+      "main": [
+        [
+          {
+            "node": "Wait Between Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Database Result": {
+      "main": [
+        [
+          {
+            "node": "Build Supabase RPC Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Source Type": {
+      "main": [
+        [
+          {
+            "node": "Telegram: Fetch Source Page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Website: Fetch Source Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Website: Fetch Source Page": {
+      "main": [
+        [
+          {
+            "node": "Parse Website Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Website Data": {
+      "main": [
+        [
+          {
+            "node": "Has Posts?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Active Theme": {
+      "main": [
+        [
+          {
+            "node": "Load Source Registry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

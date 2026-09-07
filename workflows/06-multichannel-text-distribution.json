@@ -1,0 +1,1541 @@
+{
+  "name": "06 | Multichannel Text Distribution",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "content-ops-text-webhook",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -160,
+        512
+      ],
+      "id": "2e7e9597-8bc0-514a-ae38-6f967453064a",
+      "name": "WordPress Content Webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.post.post_status }}",
+              "value2": "publish"
+            }
+          ]
+        }
+      },
+      "id": "33f823f1-31cb-5a27-83cb-7d82fcf47556",
+      "name": "Guard: Publish Status",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        736,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ typeof $('Normalize Webhook or Manual Input').item.json.body.post_thumbnail === 'string' && $('Normalize Webhook or Manual Input').item.json.body.post_thumbnail.startsWith('http') }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "50f93393-fc15-552e-9228-03088839040a",
+      "name": "Guard: Valid Image",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1536,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Твоя задача:\n\n1. Изучи статью и сделай содержательную выжимку для Telegram.\n\n2. Форматируй текст под Telegram HTML parse_mode=\"HTML\".\n\n3. Telegram поддерживает только эти теги: <b>, <i>, <u>, <s>, <a href=\"\">. Не используй <ul>, <li>, <ol>, <h1>, <h2>, <p>, <div> и любые другие теги.\n\n3.1. КРИТИЧНО: НИКОГДА не используй Markdown-разметку **жирный**, __жирный__, *курсив* или обратные кавычки. Для жирного используй только <b>...</b>.\n\n4. КРИТИЧНО: НЕ пиши заголовок статьи в ответе и НЕ повторяй его в первой строке даже с эмодзи, другими кавычками или немного изменённой пунктуацией. Заголовок будет автоматически добавлен отдельной нодой перед твоим текстом.\n\n5. Внутри текста выделяй жирным через <b></b> только:\n- ключевые слова;\n- важные цифры/сроки;\n- названия смысловых подпунктов.\n\n6. Если есть подпункты, делай так:\n• <b>Ключевой тезис:</b> короткое пояснение.\n• <b>Что важно:</b> короткое пояснение.\n\n7. Не делай весь текст жирным. Жирным должны быть только важные фразы.\n\n8. Вместо HTML-списков используй маркеры: • или →. Можно добавить тематические эмодзи перед смысловыми подпунктами, но всего не более 6 эмодзи.\n\n9. Пиши простым русским языком. В каждом абзаце не более 2 предложений. Не превращай пост в сверхкороткую заметку: сохрани несколько важных мыслей исходной статьи.\n\n10. Основной текст БЕЗ заголовка: целевая длина 620–680 символов с пробелами, абсолютный максимум 700 символов. Заголовок добавляется отдельной нодой и в этот лимит не входит.\n\n11. КРИТИЧНО: ты обязан СРАЗУ написать текст, который укладывается в лимит. Нельзя рассчитывать на последующую обрезку кодом.\n\n12. Перед ответом внутренне проверь длину. Если получилось больше 700 символов — перепиши текст короче целиком, сохранив смысл. Не обрезай хвост.\n\n13. Последнее предложение обязательно должно быть полностью завершено. Ответ не может заканчиваться предлогом, союзом, двоеточием, маркером списка или незаконченной мыслью.\n\nВАЖНО: если материала много, выбери самые важные 3–5 мыслей и переформулируй их компактнее. Верни только готовый законченный текст.",
+              "role": "system"
+            },
+            {
+              "content": "=Заголовок: {{ $('Normalize Webhook or Manual Input').item.json.body.post.post_title }}\n\nСтатья: {{ $('Normalize Webhook or Manual Input').item.json.body.post.post_content }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8d63a004-12fd-57eb-9dc0-bb1e7b33ab12",
+      "name": "Generate Telegram Version",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.6,
+      "position": [
+        1760,
+        704
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "maxTries": 3
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Твоя задача:\n1. Изучить содержание статьи и сделать из неё краткую выжимку для ВКонтакте.\n2. Форматирование: ВКонтакте НЕ поддерживает HTML теги. НЕ используй <b>, <i>, <a href> и любые HTML-теги.\n3. ЯЗЫК: Пиши СТРОГО на русском языке кириллицей. Не используй транслитерацию.\n4. Заголовок: первой строкой напиши переданный Заголовок ЗАГЛАВНЫМИ БУКВАМИ.\n5. Важные мысли и подзаголовки внутри текста выделяй ЗАГЛАВНЫМИ БУКВАМИ.\n6. Добавь тематические эмодзи перед подзаголовками. Всего эмодзи не более 8.\n7. Между абзацами должна быть пустая строка.\n8. В каждом абзаце не более 2-х предложений.\n9. Хэштеги: в самый конец поста добавь от 3 до 5 хэштегов. Никогда не больше 5.\n10. Общий объём всего текста вместе с хэштегами: целевая длина 1100–1300 символов, абсолютный максимум 1400 символов.\n\nВАЖНО: никакой код после тебя не будет обрезать текст. Ты обязан сразу вернуть полностью законченный пост в пределах 1400 символов. Если черновик длиннее — перепиши его короче целиком до отправки ответа.\n11. Заголовок должен встречаться только в первой строке. Не повторяй его ниже и не используй второй раз как подзаголовок.",
+              "role": "system"
+            },
+            {
+              "content": "=Заголовок: {{ $('Normalize Webhook or Manual Input').item.json.body.post.post_title }}\n\nСтатья: {{ $('Normalize Webhook or Manual Input').item.json.body.post.post_content }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "05c7b572-9d3e-5f7f-90c2-102386ae9beb",
+      "name": "Generate VK Version",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.6,
+      "position": [
+        960,
+        608
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "maxTries": 3
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "publications",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "source",
+              "condition": "eq",
+              "keyValue": "wordpress"
+            },
+            {
+              "keyName": "external_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Normalize Webhook or Manual Input').item.json.body.post.ID }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "published"
+            },
+            {
+              "fieldId": "published_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            },
+            {
+              "fieldId": "publication_url",
+              "fieldValue": "={{ $('Normalize Webhook or Manual Input').item.json.body.post.post_permalink }}"
+            }
+          ]
+        }
+      },
+      "id": "2390cd8f-c5d2-5f35-9f44-5e44507f4197",
+      "name": "Update WP Status",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1824,
+        512
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        704
+      ],
+      "id": "2a09635d-860d-5900-97b4-6d1dcaa94b12",
+      "name": "Manual Test Trigger"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Твоя задача:\n1. Изучи статью и сделай содержательную выжимку для мессенджера MAX.\n2. Используй HTML-форматирование, но только простые теги <b>, <i>, <a>.\n3. Первой строкой напиши переданный Заголовок в формате <b>Заголовок</b>.\n4. КРИТИЧНО: заголовок должен встречаться РОВНО ОДИН РАЗ — только в первой строке. Не повторяй его ниже, не перефразируй как второй подзаголовок.\n5. Внутри текста выделяй жирным через <b></b> только ключевые слова, важные цифры/сроки и названия подпунктов.\n6. Если есть подпункты, используй формат:\n• <b>Ключевой тезис:</b> короткое пояснение.\n• <b>Что важно:</b> короткое пояснение.\n7. Не делай весь текст жирным. Жирным должны быть только важные фразы.\n8. Напиши текст простым и вовлекающим языком.\n9. Добавь до 5 тематических эмодзи.\n10. Общий текст без служебного подвала — целевая длина 680–740 символов, абсолютный максимум 760 символов с пробелами.\n\n11. Никакой код после тебя не будет обрезать текст. Ты обязан сразу уложиться в лимит. Если черновик длиннее 760 символов — перепиши его короче целиком.\n\n12. Закончи полным предложением. Нельзя оставлять незавершённую мысль.\n12. Не добавляй ссылку и служебный подвал самостоятельно.\n13. КРИТИЧНО: НИКОГДА не используй Markdown-разметку: **жирный**, __жирный__, *курсив*, _курсив_ или обратные кавычки. Для выделения используй только HTML <b>...</b> и <i>...</i>. В ответе не должно быть символов * как маркеров форматирования.\n",
+              "role": "system"
+            },
+            {
+              "content": "=Заголовок: {{ $('Normalize Webhook or Manual Input').item.json.body.post.post_title }}\n\nСтатья: {{ $('Normalize Webhook or Manual Input').item.json.body.post.post_content }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3306a8d0-dfb2-5c15-8709-7aabcc4ce4f8",
+      "name": "Generate MAX Version",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.6,
+      "position": [
+        1760,
+        320
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "maxTries": 3
+    },
+    {
+      "parameters": {
+        "jsCode": "function countChars(text) {\n  return Array.from(String(text ?? '')).length;\n}\n\nfunction escapeHtml(text) {\n  return String(text ?? '')\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;')\n    .replace(/\"/g, '&quot;');\n}\n\nfunction decodeBasicEntities(text) {\n  return String(text ?? '')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/&amp;/g, '&')\n    .replace(/&quot;/g, '\"')\n    .replace(/&#039;/g, \"'\")\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>')\n    .replace(/&laquo;/g, '«')\n    .replace(/&raquo;/g, '»')\n    .replace(/&mdash;/g, '—');\n}\n\nfunction normalizeText(text) {\n  return String(text ?? '')\n    .replace(/\\r/g, '')\n    .replace(/[ \\t]+/g, ' ')\n    .replace(/[ \\t]+\\n/g, '\\n')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim();\n}\n\nfunction prepareRawHtml(text) {\n  let raw = String(text ?? '');\n\n  // MAX использует HTML. Если AI всё же вернул Markdown,\n  // переводим его в разрешённые HTML-теги ДО экранирования.\n  raw = raw\n    .replace(/\\*\\*\\*([^*\\n]+?)\\*\\*\\*/g, '<b><i>$1</i></b>')\n    .replace(/\\*\\*([^*\\n]+?)\\*\\*/g, '<b>$1</b>')\n    .replace(/__([^_\\n]+?)__/g, '<b>$1</b>')\n    .replace(/\\*([^*\\n]+?)\\*/g, '<i>$1</i>')\n    .replace(/```[\\s\\S]*?```/g, '')\n    .replace(/`([^`]*)`/g, '$1')\n    // Остаточные ASCII-звёздочки не должны уходить пользователю как Markdown-маркеры.\n    .replace(/\\*/g, '');\n\n  return raw\n    .replace(/<br\\s*\\/?>/gi, '\\n')\n    .replace(/<\\/(p|div|h[1-6]|li)>/gi, '\\n')\n    .replace(/<(p|div|h[1-6])[^>]*>/gi, '\\n')\n    .replace(/<li[^>]*>/gi, '• ');\n}\n\nfunction tagName(tag) {\n  const simple = String(tag).match(/^<\\/?(b|i)>$/i);\n  if (simple) return simple[1].toLowerCase();\n  if (/^<a\\s+href=\"[^\"]+\">$/i.test(String(tag))) return 'a';\n  if (/^<\\/a>$/i.test(String(tag))) return 'a';\n  return '';\n}\n\nfunction sanitizeTag(tag, allowed) {\n  const value = String(tag ?? '').trim();\n  const simple = value.match(/^<\\/?(b|i)>$/i);\n  if (simple) {\n    const name = simple[1].toLowerCase();\n    if (!allowed.includes(name)) return '';\n    return value.startsWith('</') ? `</${name}>` : `<${name}>`;\n  }\n\n  const a = value.match(/^<a\\s+href=\"([^\"]+)\">$/i);\n  if (a && allowed.includes('a')) {\n    const href = escapeHtml(a[1]).replace(/&quot;/g, '');\n    return `<a href=\"${href}\">`;\n  }\n\n  if (/^<\\/a>$/i.test(value) && allowed.includes('a')) return '</a>';\n\n  return '';\n}\n\nfunction balanceHtml(html, allowed) {\n  const tokens = String(html ?? '').split(/(<[^>]+>)/g).filter(v => v !== '');\n  const stack = [];\n  let out = '';\n\n  for (const token of tokens) {\n    if (token.startsWith('<') && token.endsWith('>')) {\n      const safeTag = sanitizeTag(token, allowed);\n      if (!safeTag) continue;\n      const name = tagName(safeTag);\n      const isClose = /^<\\//.test(safeTag);\n\n      if (!isClose) {\n        stack.push(name);\n        out += safeTag;\n      } else if (stack[stack.length - 1] === name) {\n        stack.pop();\n        out += safeTag;\n      }\n    } else {\n      out += token;\n    }\n  }\n\n  while (stack.length) {\n    out += `</${stack.pop()}>`;\n  }\n\n  return out;\n}\n\nfunction cleanHtml(text, allowed = ['b', 'i', 'a']) {\n  const raw = prepareRawHtml(text);\n  const tokens = raw.split(/(<[^>]+>)/g).filter(v => v !== '');\n  let out = '';\n\n  for (const token of tokens) {\n    if (token.startsWith('<') && token.endsWith('>')) {\n      out += sanitizeTag(token, allowed);\n    } else {\n      out += escapeHtml(decodeBasicEntities(token));\n    }\n  }\n\n  return balanceHtml(normalizeText(out), allowed);\n}\n\nfunction stripTags(html) {\n  return normalizeText(decodeBasicEntities(String(html ?? '').replace(/<[^>]+>/g, '')));\n}\n\nfunction countVisibleHtml(html) {\n  return countChars(stripTags(html));\n}\n\nfunction collectHashtags(text) {\n  const found = String(text ?? '').match(/#[\\p{L}\\p{N}_]+/gu) || [];\n  const seen = new Set();\n  const tags = [];\n\n  for (const tag of found) {\n    const clean = tag.replace(/[^\\p{L}\\p{N}_#]/gu, '').trim();\n    const key = clean.toLowerCase();\n    if (clean && !seen.has(key)) {\n      seen.add(key);\n      tags.push(clean);\n    }\n    if (tags.length >= 5) break;\n  }\n\n  return tags;\n}\n\nfunction removeHashtags(text) {\n  return String(text ?? '')\n    .replace(/#[\\p{L}\\p{N}_]+/gu, '')\n    .replace(/[ \\t]+\\n/g, '\\n')\n    .trim();\n}\n\nconst raw = $json.message?.content || $json.content || $json.text || '';\nconst thumbnail = $('Normalize Webhook or Manual Input').item.json.body.post_thumbnail;\n\nlet html = cleanHtml(raw, ['b', 'i', 'a']);\nconst hashtags = collectHashtags(stripTags(html));\nhtml = cleanHtml(removeHashtags(html), ['b', 'i', 'a']);\n\nconst tagsLine = hashtags.join(' ');\nconst ctaHtml = '';\nconst separator = countVisibleHtml(html) && tagsLine ? '\\n\\n' : '';\nconst finalText = `${html}${ctaHtml}${separator}${escapeHtml(tagsLine)}`.trim();\n\nif (finalText.includes('*')) {\n  throw new Error('MAX_MARKDOWN_GUARD: после очистки в тексте остались ASCII-звёздочки. Публикация остановлена.');\n}\n\nreturn [{\n  json: {\n    text: finalText,\n    max_text: finalText,\n    max_length: countVisibleHtml(finalText),\n    max_was_cut: false,\n    max_hashtags: hashtags,\n    max_hashtags_count: hashtags.length,\n    max_html_preserved: true,\n    thumbnail\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2112,
+        320
+      ],
+      "id": "8b027db4-5b73-50e2-bac0-b85d9f2f8d15",
+      "name": "Enforce MAX Text Limits"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://platform-api.max.ru/uploads?type=image",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $vars.MAX_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2336,
+        320
+      ],
+      "id": "698f64de-2f59-5b9f-be60-9b42f69d03a3",
+      "name": "MAX: Get Upload URL",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Enforce MAX Text Limits').item.json.thumbnail }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2560,
+        320
+      ],
+      "id": "d89e6053-6526-5661-af1c-d35efbe21c28",
+      "name": "MAX: Download Image",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('MAX: Get Upload URL').item.json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $vars.MAX_API_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "data",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2784,
+        320
+      ],
+      "id": "cf77e83b-656c-59bb-bfc6-ebebb8bc71b8",
+      "name": "MAX: Upload Image",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://platform-api.max.ru/messages?chat_id=YOUR_MAX_CHAT_ID",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $vars.MAX_API_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ \"text\": $('Enforce MAX Text Limits').item.json.max_text, \"format\": \"html\", \"attachments\": [{ \"type\": \"image\", \"payload\": { \"token\": Object.values($json.photos)[0].token } }] }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3072,
+        320
+      ],
+      "id": "34677221-e272-585a-8115-ac20d17514b5",
+      "name": "MAX: Publish Post with Image",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "tableId": "publications",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "content",
+              "fieldValue": "={{ $('Enforce MAX Text Limits').item.json.max_text }}"
+            },
+            {
+              "fieldId": "content_type",
+              "fieldValue": "post"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "published"
+            },
+            {
+              "fieldId": "source",
+              "fieldValue": "MAX: Publish Post with Image"
+            },
+            {
+              "fieldId": "publication_url",
+              "fieldValue": "={{ $('Normalize Webhook or Manual Input').item.json.body.post.post_permalink }}"
+            },
+            {
+              "fieldId": "published_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            },
+            {
+              "fieldId": "media_urls",
+              "fieldValue": "={{ [ $('Normalize Webhook or Manual Input').item.json.body.post_thumbnail ] }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        3360,
+        320
+      ],
+      "id": "67198ffe-79fc-5b0c-9a02-e9bc38e33630",
+      "name": "Record MAX Publication",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=✅ <b>Publication completed</b>\n\n📱 <a href=\"https://t.me/YOUR_TELEGRAM_CHANNEL\">Telegram</a>\n🔵 <a href=\"https://vk.com/YOUR_VK_COMMUNITY\">VK</a>\n⭐ <a href=\"https://dzen.ru/YOUR_DZEN_CHANNEL\">Dzen</a>\n💬 <a href=\"https://max.ru/YOUR_MAX_CHANNEL\">MAX</a>\n🧵 <a href=\"{{ $('Threads: Get URL').item.json.url }}\">Threads</a>\n🌐 <a href=\"{{ $('Normalize Webhook or Manual Input').item.json.body.post.post_permalink }}\">WordPress</a>",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        4480,
+        816
+      ],
+      "id": "d25c14f3-9e89-599c-bbaf-6ddeb9a6dbab",
+      "name": "Notify Content Manager",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "operation": "sendPhoto",
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "binaryData": true,
+        "additionalFields": {
+          "caption": "={{ $('Telegram Safe Caption').item.json.caption }}",
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "29cc6105-2b0c-50f4-931e-b13c6ef677eb",
+      "name": "Publish to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2560,
+        800
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "tableId": "publications",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "content",
+              "fieldValue": "={{ $json.result.caption }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "published"
+            },
+            {
+              "fieldId": "source",
+              "fieldValue": "telegram"
+            },
+            {
+              "fieldId": "external_id",
+              "fieldValue": "={{ $json.result.message_id }}"
+            },
+            {
+              "fieldId": "publication_url",
+              "fieldValue": "=https://t.me/YOUR_SOURCE_CHANNEL/{{ $json.result.message_id }}"
+            },
+            {
+              "fieldId": "content_type",
+              "fieldValue": "post"
+            },
+            {
+              "fieldId": "published_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            },
+            {
+              "fieldId": "media_urls",
+              "fieldValue": "={{ [ $('Normalize Webhook or Manual Input').item.json.body.post_thumbnail ] }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        2784,
+        800
+      ],
+      "id": "a7302bbe-f65a-5dd5-8b1f-3837a92d0095",
+      "name": "Record Telegram Publication",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "tableId": "publications",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "media_urls",
+              "fieldValue": "={{ [ $('Normalize Webhook or Manual Input').item.json.body.post_thumbnail ] }}"
+            },
+            {
+              "fieldId": "published_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            },
+            {
+              "fieldId": "source",
+              "fieldValue": "vk"
+            },
+            {
+              "fieldId": "external_id",
+              "fieldValue": "={{ $json.response.post_id }}"
+            },
+            {
+              "fieldId": "publication_url",
+              "fieldValue": "=https://example.com/wall-100000001_{{ $json.response.post_id }}"
+            },
+            {
+              "fieldId": "content",
+              "fieldValue": "={{ $('Enforce VK Text Limits').item.json.vk_text }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "published"
+            },
+            {
+              "fieldId": "content_type",
+              "fieldValue": "post"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        3360,
+        80
+      ],
+      "id": "f5f8e300-0f00-5144-be25-9569a261d974",
+      "name": "Record VK Publication",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "Твоя задача: сделать короткий пост для Threads по статье.\n\nГЛАВНОЕ ПРАВИЛО:\nТекст должен быть СТРОГО до 280 символов вместе с пробелами, эмодзи и хэштегами. Никакой код после тебя не будет его обрезать.\n\nНе обрезай длинную статью. Не пересказывай всё подряд.\nНужно ПЕРЕПИСАТЬ и СЖАТЬ смысл под лимит Threads.\n\nФормат:\n1. Первая строка — короткий цепляющий тезис.\n2. Далее 1 короткое предложение по сути.\n3. В конце 1–2 хэштега.\n4. Никаких HTML-тегов.\n5. Эмодзи можно, но не больше 2.\n6. Хэштегов не больше 2.\n7. Не используй markdown, списки, кавычки вокруг ответа и служебные пояснения.\n8. Пиши простым русским языком.\n\nОптимальная длина: 220–260 символов.\nПеред ответом проверь длину. Если вышло больше 280 символов — перепиши весь пост короче. Не обрезай хвост. Если сомневаешься — делай короче.",
+              "role": "system"
+            },
+            {
+              "content": "=Статья:{{ $('Normalize Webhook or Manual Input').item.json.body.post.post_content }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "233ac93f-e39c-5f1e-a382-74e3e898351b",
+      "name": "Generate Threads Version",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.6,
+      "position": [
+        1760,
+        1088
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "maxTries": 3
+    },
+    {
+      "parameters": {
+        "resource": "media",
+        "mediaUrl": "={{ $('Normalize Webhook or Manual Input').item.json.body.post_thumbnail }}"
+      },
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        2336,
+        1088
+      ],
+      "id": "2240f404-f93d-53d4-8058-7981407cc138",
+      "name": "Threads: Upload Media",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "platform": "threads",
+        "accountId": {
+          "__rl": true,
+          "value": "YOUR_PLATFORM_ACCOUNT_ID",
+          "mode": "id",
+          "cachedResultName": "YOUR_PLATFORM_ACCOUNT_ID"
+        },
+        "postContentText": "={{ $('Enforce Threads Text Limits').item.json.threads_text }}",
+        "postContentMediaUrls": "={{ $json.url }}",
+        "options": {}
+      },
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        2560,
+        1088
+      ],
+      "id": "7fe7b538-a5eb-56be-a442-2795cacae509",
+      "name": "Threads: Create Post",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "minutes"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        4032,
+        816
+      ],
+      "id": "1fee8358-3b0f-5fa6-a9d1-8710030ea46a",
+      "name": "Wait Threads"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "postSubmissionId": "={{ $json.postSubmissionId }}"
+      },
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        4256,
+        816
+      ],
+      "id": "b964b199-bd40-5b43-b71d-4b1b616f9b2e",
+      "name": "Threads: Get URL",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2336,
+        800
+      ],
+      "id": "65c282af-df93-5db4-aab6-6147a408e87f",
+      "name": "Merge Telegram Image and Caption"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Normalize Webhook or Manual Input').item.json.body.post_thumbnail }}",
+        "options": {}
+      },
+      "id": "b969e49b-db4e-5462-80d0-b53eef67af5c",
+      "name": "Telegram: Download Featured Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2112,
+        896
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "function countChars(text) {\n  return Array.from(String(text ?? '')).length;\n}\n\nfunction escapeHtml(text) {\n  return String(text ?? '')\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;')\n    .replace(/\"/g, '&quot;');\n}\n\nfunction decodeBasicEntities(text) {\n  return String(text ?? '')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/&amp;/g, '&')\n    .replace(/&quot;/g, '\"')\n    .replace(/&#039;/g, \"'\")\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>')\n    .replace(/&laquo;/g, '«')\n    .replace(/&raquo;/g, '»')\n    .replace(/&mdash;/g, '—');\n}\n\nfunction normalizeText(text) {\n  return String(text ?? '')\n    .replace(/\\r/g, '')\n    .replace(/[ \\t]+/g, ' ')\n    .replace(/[ \\t]+\\n/g, '\\n')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim();\n}\n\nfunction prepareRawHtml(text) {\n  let raw = String(text ?? '');\n\n  // Если модель случайно вернула Markdown, переводим его в разрешённый Telegram HTML.\n  // Это НЕ меняет длину содержательно и ничего не обрезает.\n  raw = raw\n    .replace(/\\*\\*([^*\\n]+?)\\*\\*/g, '<b>$1</b>')\n    .replace(/__([^_\\n]+?)__/g, '<b>$1</b>')\n    .replace(/\\*([^*\\n]+?)\\*/g, '<i>$1</i>')\n    .replace(/_([^_\\n]+?)_/g, '<i>$1</i>')\n    .replace(/\\*\\*/g, '')\n    .replace(/__/g, '');\n\n  return raw\n    .replace(/```[\\s\\S]*?```/g, '')\n    .replace(/`([^`]*)`/g, '$1')\n    .replace(/<br\\s*\\/?>/gi, '\\n')\n    .replace(/<\\/(p|div|h[1-6]|li)>/gi, '\\n')\n    .replace(/<(p|div|h[1-6])[^>]*>/gi, '\\n')\n    .replace(/<li[^>]*>/gi, '• ');\n}\n\nfunction tagName(tag) {\n  const simple = String(tag).match(/^<\\/?(b|i|u|s)>$/i);\n  if (simple) return simple[1].toLowerCase();\n  if (/^<a\\s+href=\"[^\"]+\">$/i.test(String(tag))) return 'a';\n  if (/^<\\/a>$/i.test(String(tag))) return 'a';\n  return '';\n}\n\nfunction sanitizeTag(tag, allowed) {\n  const value = String(tag ?? '').trim();\n\n  const simple = value.match(/^<\\/?(b|i|u|s)>$/i);\n  if (simple) {\n    const name = simple[1].toLowerCase();\n    if (!allowed.includes(name)) return '';\n    return value.startsWith('</') ? `</${name}>` : `<${name}>`;\n  }\n\n  const a = value.match(/^<a\\s+href=\"([^\"]+)\">$/i);\n  if (a && allowed.includes('a')) {\n    const href = escapeHtml(a[1]).replace(/&quot;/g, '');\n    return `<a href=\"${href}\">`;\n  }\n\n  if (/^<\\/a>$/i.test(value) && allowed.includes('a')) return '</a>';\n  return '';\n}\n\nfunction balanceHtml(html, allowed) {\n  const tokens = String(html ?? '').split(/(<[^>]+>)/g).filter(v => v !== '');\n  const stack = [];\n  let out = '';\n\n  for (const token of tokens) {\n    if (token.startsWith('<') && token.endsWith('>')) {\n      const safeTag = sanitizeTag(token, allowed);\n      if (!safeTag) continue;\n\n      const name = tagName(safeTag);\n      const isClose = /^<\\//.test(safeTag);\n\n      if (!isClose) {\n        stack.push(name);\n        out += safeTag;\n      } else if (stack[stack.length - 1] === name) {\n        stack.pop();\n        out += safeTag;\n      }\n    } else {\n      out += token;\n    }\n  }\n\n  while (stack.length) out += `</${stack.pop()}>`;\n  return out;\n}\n\nfunction cleanHtml(text, allowed = ['b', 'i', 'u', 's', 'a']) {\n  const raw = prepareRawHtml(text);\n  const tokens = raw.split(/(<[^>]+>)/g).filter(v => v !== '');\n  let out = '';\n\n  for (const token of tokens) {\n    if (token.startsWith('<') && token.endsWith('>')) {\n      out += sanitizeTag(token, allowed);\n    } else {\n      out += escapeHtml(decodeBasicEntities(token));\n    }\n  }\n\n  return balanceHtml(normalizeText(out), allowed);\n}\n\nfunction stripTags(html) {\n  return normalizeText(\n    decodeBasicEntities(String(html ?? '').replace(/<[^>]+>/g, ''))\n  );\n}\n\nfunction countVisibleHtml(html) {\n  return countChars(stripTags(html));\n}\n\nfunction titleKey(text) {\n  return stripTags(String(text ?? ''))\n    .toLowerCase()\n    .replace(/ё/g, 'е')\n    .replace(/[^\\p{L}\\p{N}]+/gu, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nfunction removeLeadingDuplicateTitle(html, titleRaw) {\n  const wanted = titleKey(titleRaw);\n  if (!wanted) return normalizeText(html);\n\n  const lines = normalizeText(html).split('\\n');\n  const firstIndex = lines.findIndex(line => stripTags(line).trim());\n  if (firstIndex < 0) return normalizeText(html);\n\n  const first = titleKey(lines[firstIndex]);\n  const same =\n    first === wanted ||\n    (first.startsWith(wanted) && first.length <= wanted.length + 14) ||\n    (wanted.startsWith(first) && wanted.length <= first.length + 14);\n\n  if (same) {\n    lines.splice(firstIndex, 1);\n    while (lines.length && !stripTags(lines[0]).trim()) lines.shift();\n  }\n\n  return normalizeText(lines.join('\\n'));\n}\n\nconst titleRaw = $('Normalize Webhook or Manual Input').item.json.body.post.post_title || '';\nconst bodyRaw = $('Generate Telegram Version').item.json.message?.content || '';\n\nconst title = escapeHtml(stripTags(cleanHtml(titleRaw, [])));\nlet bodyHtml = cleanHtml(bodyRaw, ['b', 'i', 'u', 's', 'a']);\nbodyHtml = removeLeadingDuplicateTitle(bodyHtml, titleRaw);\n\n// Текст не обрезается.\n// Только собираем финальную подпись и проверяем, что модель реально уложилась.\nconst prefix = `<b>${title}</b>\\n\\n`;\nconst caption = `${prefix}${bodyHtml}`.trim();\n\nconst visibleLength = countVisibleHtml(caption);\nconst maxCaptionChars = 1000; // безопасный запас под caption sendPhoto\n\nif (visibleLength > maxCaptionChars) {\n  throw new Error(\n    `TELEGRAM_TEXT_TOO_LONG: ${visibleLength}/${maxCaptionChars}. ` +\n    `Текст НЕ обрезан. Нужно перегенерировать его короче в ноде \"Generate Telegram Version\".`\n  );\n}\n\nconst plain = stripTags(bodyHtml);\nif (plain && !/[.!?…][\"»')\\]]*$/.test(plain)) {\n  throw new Error(\n    'TELEGRAM_INCOMPLETE_SENTENCE: текст НЕ обрезан, но последнее предложение выглядит незавершённым. ' +\n    'Нужно перегенерировать текст.'\n  );\n}\n\nreturn [{\n  json: {\n    caption,\n    telegram_caption_length: visibleLength,\n    telegram_caption_was_cut: false,\n    telegram_html_preserved: true,\n    telegram_validated: true\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2112,
+        704
+      ],
+      "id": "23ff68da-93e9-5285-a0df-8fc339e5ac94",
+      "name": "Telegram Safe Caption"
+    },
+    {
+      "parameters": {
+        "jsCode": "function countChars(text) {\n  return Array.from(String(text ?? '')).length;\n}\n\nfunction stripHtml(text) {\n  return String(text ?? '')\n    .replace(/<br\\s*\\/?>/gi, '\\n')\n    .replace(/<\\/p>/gi, '\\n')\n    .replace(/<\\/div>/gi, '\\n')\n    .replace(/<\\/h[1-6]>/gi, '\\n')\n    .replace(/<\\/li>/gi, '\\n')\n    .replace(/<li[^>]*>/gi, '• ')\n    .replace(/<[^>]+>/g, '')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/&amp;/g, '&')\n    .replace(/&quot;/g, '\"')\n    .replace(/&#039;/g, \"'\")\n    .replace(/&laquo;/g, '«')\n    .replace(/&raquo;/g, '»')\n    .replace(/&mdash;/g, '—');\n}\n\nfunction normalize(text) {\n  return String(text ?? '')\n    .replace(/\\r/g, '')\n    .replace(/[ \\t]+/g, ' ')\n    .replace(/[ \\t]+\\n/g, '\\n')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim();\n}\n\nconst raw = $json.message?.content || $json.content || $json.text || '';\nconst finalText = normalize(stripHtml(raw));\nconst length = countChars(finalText);\nconst maxChars = 1400;\n\nif (length > maxChars) {\n  throw new Error(\n    `VK_TEXT_TOO_LONG: ${length}/${maxChars}. ` +\n    `Текст НЕ обрезан. Нужно перегенерировать его короче в ноде \"Generate VK Version\".`\n  );\n}\n\nif (finalText && !/[.!?…#\\p{L}\\p{N}]$/u.test(finalText)) {\n  throw new Error('VK_TEXT_INVALID_END: текст выглядит незавершённым. Перегенерируй пост.');\n}\n\nreturn [{\n  json: {\n    vk_text: finalText,\n    vk_length: length,\n    vk_was_cut: false,\n    vk_validated: true\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1312,
+        608
+      ],
+      "id": "84b2417a-1ebd-5139-a565-04cac6b24529",
+      "name": "Enforce VK Text Limits"
+    },
+    {
+      "parameters": {
+        "jsCode": "function countChars(text) {\n  return Array.from(String(text ?? '')).length;\n}\n\nfunction stripHtml(text) {\n  return String(text ?? '')\n    .replace(/<[^>]+>/g, '')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/&amp;/g, '&')\n    .replace(/&quot;/g, '\"')\n    .replace(/&#039;/g, \"'\");\n}\n\nfunction normalize(text) {\n  return String(text ?? '')\n    .replace(/\\r/g, '')\n    .replace(/[ \\t]+/g, ' ')\n    .replace(/[ \\t]+\\n/g, '\\n')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim();\n}\n\nconst raw = $json.message?.content || $json.content || $json.text || '';\nconst finalText = normalize(stripHtml(raw));\nconst length = countChars(finalText);\nconst maxChars = 300;\n\nif (length > maxChars) {\n  throw new Error(\n    `THREADS_TEXT_TOO_LONG: ${length}/${maxChars}. ` +\n    `Текст НЕ обрезан. Нужно перегенерировать его короче в ноде \"Generate Threads Version\".`\n  );\n}\n\nreturn [{\n  json: {\n    threads_text: finalText,\n    threads_length: length,\n    threads_limit: maxChars,\n    threads_was_reformatted: false,\n    threads_was_cut: false,\n    threads_validated: true\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2112,
+        1088
+      ],
+      "id": "c71b7914-3c0f-5ff9-8a77-e866590df953",
+      "name": "Enforce Threads Text Limits"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!$json.postSubmissionId }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "892e001f-b526-5ac8-b8c9-d3703afdf3e3",
+      "name": "Check Threads Publication",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2784,
+        1088
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "Ты аварийно переписываешь пост для Threads после ошибки публикации.\n\nНужно сделать НОВЫЙ текст, а не исправлять старый.\n\nЖёсткие правила:\n1. Максимум 220 символов вместе с пробелами, эмодзи и хэштегами.\n2. Только русский язык.\n3. Без HTML.\n4. Без markdown.\n5. Без списков.\n6. Не больше 1 эмодзи.\n7. Не больше 1 хэштега.\n8. Верни только готовый текст, без пояснений.\n\nЕсли сомневаешься — делай короче.",
+              "role": "system"
+            },
+            {
+              "content": "=Ошибка публикации Threads:\n{{ JSON.stringify($json) }}\n\nСтарый текст:\n{{ $('Enforce Threads Text Limits').item.json.threads_text }}\n\nСтатья:\n{{ $('Normalize Webhook or Manual Input').item.json.body.post.post_content }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d83adfff-f3d0-564e-bc73-5f03b1e64e19",
+      "name": "Regenerate Threads Version for Retry",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.6,
+      "position": [
+        3008,
+        1152
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "maxTries": 3
+    },
+    {
+      "parameters": {
+        "jsCode": "function countChars(text) {\n  return Array.from(String(text ?? '')).length;\n}\n\nfunction stripHtml(text) {\n  return String(text ?? '').replace(/<[^>]+>/g, '');\n}\n\nfunction normalize(text) {\n  return String(text ?? '')\n    .replace(/\\r/g, '')\n    .replace(/[ \\t]+/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nconst raw = $json.message?.content || $json.content || $json.text || '';\nconst text = normalize(stripHtml(raw));\nconst maxChars = 220;\nconst length = countChars(text);\n\nif (length > maxChars) {\n  throw new Error(\n    `THREADS_RETRY_TOO_LONG: ${length}/${maxChars}. ` +\n    `Retry-текст НЕ обрезан. Нужно перегенерировать его короче.`\n  );\n}\n\nreturn [{\n  json: {\n    threads_text: text,\n    threads_length: length,\n    threads_limit: maxChars,\n    threads_retry: true,\n    threads_was_cut: false,\n    threads_validated: true\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        1152
+      ],
+      "id": "6f8bb7af-1020-54df-ad08-1229dcba90da",
+      "name": "Enforce Threads Retry Limits"
+    },
+    {
+      "parameters": {
+        "platform": "threads",
+        "accountId": {
+          "__rl": true,
+          "value": "YOUR_PLATFORM_ACCOUNT_ID",
+          "mode": "id",
+          "cachedResultName": "YOUR_PLATFORM_ACCOUNT_ID"
+        },
+        "postContentText": "={{ $('Enforce Threads Retry Limits').item.json.threads_text }}",
+        "postContentMediaUrls": "={{ $('Threads: Upload Media').item.json.url }}",
+        "options": {}
+      },
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        3584,
+        1152
+      ],
+      "id": "45f800ab-f86b-5f29-8832-8ac5b403509b",
+      "name": "Threads: Create Post RETRY",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!$json.postSubmissionId }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "74db695a-b2b8-5c55-9df5-c603af690ecc",
+      "name": "Check Threads Retry Publication",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        3808,
+        1152
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "={{ '⚠️ <b>Threads не опубликовался после повтора</b>\n\nПост: ' + String($('Normalize Webhook or Manual Input').item.json.body.post.post_title || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '\n\nОшибка:\n' + String(JSON.stringify($json) || '').slice(0, 700).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        4032,
+        1200
+      ],
+      "id": "db3225e8-fc56-5373-b295-6804c7a9788d",
+      "name": "Alert on Threads Retry Failure",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first();\nconst incoming = input?.json || {};\nconst isManualExecution = $execution.mode === 'manual';\n\n// Require the configured secret for non-manual webhook executions.\nif (incoming?.body?.post && incoming.body.post.ID) {\n  const expectedSecret = String($vars.CONTENT_OPS_WEBHOOK_SECRET || '').trim();\n  const providedSecret = String(\n    incoming.headers?.['x-content-ops-secret'] ||\n    incoming.body?.secret ||\n    incoming.body?.webhook_secret ||\n    ''\n  ).trim();\n  if (!isManualExecution && !expectedSecret) {\n    throw new Error('CONTENT_OPS_WEBHOOK_SECRET is not configured');\n  }\n  if (!isManualExecution && providedSecret !== expectedSecret) {\n    throw new Error('Invalid webhook secret');\n  }\n  const safeIncoming = structuredClone(incoming);\n  if (safeIncoming.body) {\n    delete safeIncoming.body.secret;\n    delete safeIncoming.body.webhook_secret;\n  }\n  return [{ json: { ...safeIncoming, __trigger_source: 'webhook' }, binary: input.binary }];\n}\n\n// Fixture for the Manual Trigger branch.\nconst manualPayload = {\n  headers: {},\n  params: {},\n  query: {},\n  body: {\n    post_id: 1001,\n    post: {\n      ID: 1001,\n      post_title: 'Three practical ways to improve cash-flow visibility',\n      post_content: '<p>A fictional small business introduces a weekly cash-flow review, assigns owners to overdue invoices, and tracks payment risks in one dashboard.</p>',\n      post_status: 'publish',\n      post_permalink: 'https://example.com/sample-business-article/'\n    },\n    post_thumbnail: 'https://example.com/wp-content/uploads/sample-business-cover.jpg',\n    post_permalink: 'https://example.com/sample-business-article/',\n    executionMode: 'manual'\n  }\n};\n\nreturn [{ json: { ...manualPayload, __trigger_source: 'manual' } }];"
+      },
+      "id": "b42ac459-dc15-5f56-a88d-1cbae7054200",
+      "name": "Normalize Webhook or Manual Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Normalize Webhook or Manual Input').item.json.body.post_thumbnail }}",
+        "options": {}
+      },
+      "id": "bb4d466a-d960-5582-84a0-5b100000001",
+      "name": "VK: Download Featured Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1824,
+        80
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "url": "https://api.vk.com/method/photos.getWallUploadServer",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "group_id",
+              "value": "YOUR_VK_OWNER_ID"
+            },
+            {
+              "name": "access_token",
+              "value": "={{ $vars.VK_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "v",
+              "value": "5.199"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "823d1d79-9479-5c2f-8177-7b7e179ba704",
+      "name": "VK: Get Upload URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2112,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "0f34ebaa-f358-5567-a3cd-0c72dda7b8e1",
+      "name": "Merge Image File and Upload URL",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        2336,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.response.upload_url }}",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "photo",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1180a631-bcb4-5eac-966a-491b801c3950",
+      "name": "VK: Upload Photo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2560,
+        80
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vk.com/method/photos.saveWallPhoto",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "group_id",
+              "value": "YOUR_VK_OWNER_ID"
+            },
+            {
+              "name": "photo",
+              "value": "={{ $json.photo }}"
+            },
+            {
+              "name": "server",
+              "value": "={{ $json.server }}"
+            },
+            {
+              "name": "hash",
+              "value": "={{ $json.hash }}"
+            },
+            {
+              "name": "access_token",
+              "value": "={{ $vars.VK_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "v",
+              "value": "5.199"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "611778e6-405e-56de-bc59-e29ea8194d92",
+      "name": "VK: Save Photo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2784,
+        80
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vk.com/method/wall.post",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "owner_id",
+              "value": "YOUR_VK_OWNER_ID"
+            },
+            {
+              "name": "from_group",
+              "value": "1"
+            },
+            {
+              "name": "message",
+              "value": "={{ $('Enforce VK Text Limits').item.json.vk_text }}"
+            },
+            {
+              "name": "attachments",
+              "value": "=photo{{ $json.response[0].owner_id }}_{{ $json.response[0].id }}"
+            },
+            {
+              "name": "access_token",
+              "value": "={{ $vars.VK_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "v",
+              "value": "5.199"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a7758a1d-16a9-5ee9-9f1d-eaaabe3e3e35",
+      "name": "VK: Publish Post with Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        3072,
+        80
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "command": "={{ $('Normalize Webhook or Manual Input').item.json.__trigger_source === 'manual' ? 'echo ALLOW_MANUAL' : 'mkdir -p /files/n8n_wordpress_post_locks && if mkdir \"/files/n8n_wordpress_post_locks/post_' + String($('Normalize Webhook or Manual Input').item.json.body.post.ID) + '\" 2>/dev/null; then echo ALLOW_WEBHOOK; else echo DUPLICATE_WEBHOOK; fi' }}"
+      },
+      "id": "d2806cfb-45ce-5952-8df0-ed48630c4631",
+      "name": "Atomic Duplicate Guard by Post ID",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        288,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const marker = String($json.stdout || '').trim();\nconst source = $('Normalize Webhook or Manual Input').item;\n\nif (marker.includes('DUPLICATE_WEBHOOK')) {\n  // Возвращаем 0 items — весь downstream прекращается,\n  // поэтому повтор не доходит ни до AI, ни до одной соцсети.\n  return [];\n}\n\nif (!marker.includes('ALLOW_WEBHOOK') && !marker.includes('ALLOW_MANUAL')) {\n  throw new Error(\n    'DEDUPE_GUARD_UNKNOWN_RESULT: ' +\n    JSON.stringify({ stdout: $json.stdout, stderr: $json.stderr, exitCode: $json.exitCode })\n  );\n}\n\nreturn [{\n  json: source.json,\n  binary: source.binary\n}];"
+      },
+      "id": "0b773ca4-cb50-5149-a169-2476b1ab466f",
+      "name": "Allow First Webhook Only",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        608
+      ]
+    }
+  ],
+  "connections": {
+    "WordPress Content Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Webhook or Manual Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard: Publish Status": {
+      "main": [
+        [
+          {
+            "node": "Generate VK Version",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard: Valid Image": {
+      "main": [
+        [
+          {
+            "node": "Update WP Status",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Telegram Version",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Telegram: Download Featured Image",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate MAX Version",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Threads Version",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "VK: Download Featured Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Telegram Version": {
+      "main": [
+        [
+          {
+            "node": "Telegram Safe Caption",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate VK Version": {
+      "main": [
+        [
+          {
+            "node": "Enforce VK Text Limits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Test Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Webhook or Manual Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate MAX Version": {
+      "main": [
+        [
+          {
+            "node": "Enforce MAX Text Limits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enforce MAX Text Limits": {
+      "main": [
+        [
+          {
+            "node": "MAX: Get Upload URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MAX: Get Upload URL": {
+      "main": [
+        [
+          {
+            "node": "MAX: Download Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MAX: Download Image": {
+      "main": [
+        [
+          {
+            "node": "MAX: Upload Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MAX: Upload Image": {
+      "main": [
+        [
+          {
+            "node": "MAX: Publish Post with Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MAX: Publish Post with Image": {
+      "main": [
+        [
+          {
+            "node": "Record MAX Publication",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish to Telegram": {
+      "main": [
+        [
+          {
+            "node": "Record Telegram Publication",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Threads Version": {
+      "main": [
+        [
+          {
+            "node": "Enforce Threads Text Limits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Threads: Upload Media": {
+      "main": [
+        [
+          {
+            "node": "Threads: Create Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Threads: Create Post": {
+      "main": [
+        [
+          {
+            "node": "Check Threads Publication",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Threads": {
+      "main": [
+        [
+          {
+            "node": "Threads: Get URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Threads: Get URL": {
+      "main": [
+        [
+          {
+            "node": "Notify Content Manager",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Telegram Image and Caption": {
+      "main": [
+        [
+          {
+            "node": "Publish to Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram: Download Featured Image": {
+      "main": [
+        [
+          {
+            "node": "Merge Telegram Image and Caption",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Telegram Safe Caption": {
+      "main": [
+        [
+          {
+            "node": "Merge Telegram Image and Caption",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enforce VK Text Limits": {
+      "main": [
+        [
+          {
+            "node": "Guard: Valid Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enforce Threads Text Limits": {
+      "main": [
+        [
+          {
+            "node": "Threads: Upload Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Threads Publication": {
+      "main": [
+        [
+          {
+            "node": "Wait Threads",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Regenerate Threads Version for Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Regenerate Threads Version for Retry": {
+      "main": [
+        [
+          {
+            "node": "Enforce Threads Retry Limits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enforce Threads Retry Limits": {
+      "main": [
+        [
+          {
+            "node": "Threads: Create Post RETRY",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Threads: Create Post RETRY": {
+      "main": [
+        [
+          {
+            "node": "Check Threads Retry Publication",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Threads Retry Publication": {
+      "main": [
+        [
+          {
+            "node": "Wait Threads",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert on Threads Retry Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Webhook or Manual Input": {
+      "main": [
+        [
+          {
+            "node": "Atomic Duplicate Guard by Post ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VK: Download Featured Image": {
+      "main": [
+        [
+          {
+            "node": "Merge Image File and Upload URL",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "VK: Get Upload URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VK: Get Upload URL": {
+      "main": [
+        [
+          {
+            "node": "Merge Image File and Upload URL",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Image File and Upload URL": {
+      "main": [
+        [
+          {
+            "node": "VK: Upload Photo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VK: Upload Photo": {
+      "main": [
+        [
+          {
+            "node": "VK: Save Photo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VK: Save Photo": {
+      "main": [
+        [
+          {
+            "node": "VK: Publish Post with Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VK: Publish Post with Image": {
+      "main": [
+        [
+          {
+            "node": "Record VK Publication",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Atomic Duplicate Guard by Post ID": {
+      "main": [
+        [
+          {
+            "node": "Allow First Webhook Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Allow First Webhook Only": {
+      "main": [
+        [
+          {
+            "node": "Guard: Publish Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

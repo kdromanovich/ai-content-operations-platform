@@ -1,0 +1,488 @@
+{
+  "name": "01 | Telegram Source Ingestion",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "5a734f2e-3453-5155-bdfe-9bdfedebd993",
+      "name": "Manual: Start Telegram Ingestion",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1552,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "channel-name",
+              "name": "channel_name",
+              "value": "={{ $json.default_channel_name }}",
+              "type": "string"
+            },
+            {
+              "id": "oldest-post-id",
+              "name": "oldest_post_id",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "iteration",
+              "name": "iteration",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "max-iterations",
+              "name": "max_iterations",
+              "value": 50,
+              "type": "number"
+            },
+            {
+              "id": "total-posts",
+              "name": "total_posts_collected",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "f45758fe-5066-5b96-9546-57991dcee31b",
+              "name": "supabase_url",
+              "value": "={{ $json.supabase_url }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e6cfd65d-85dd-503a-bfc9-9c8042bdcad7",
+      "name": "Set Initial Variables",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        -736,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "reset": true
+        }
+      },
+      "id": "a387b82f-e7e3-5c8c-aa37-4d2006f29935",
+      "name": "Loop Until All Posts",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -96,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://t.me/s/{{ $json.channel_name }}{{ $json.oldest_post_id ? '?before=' + $json.oldest_post_id : '' }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "c710c50b-48d9-5bfb-acf4-7535ca46e4fc",
+      "name": "Telegram: Fetch Source Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        272,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "posts",
+              "cssSelector": ".tgme_widget_message",
+              "returnValue": "html",
+              "returnArray": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c6b24a60-5e54-545a-bffb-8432e1b82644",
+      "name": "Extract Posts HTML",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        464,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const posts = [];\nconst inputPosts = $input.first().json.posts;\n\nfor (const html of inputPosts) {\n  let postId = null;\n  // Ищем ID поста\n  const footerMatch = html.match(/t\\.me\\/[^\\/]+\\/(\\d+)/);\n  if (footerMatch) postId = footerMatch[1];\n  \n  if (!postId) continue;\n\n  // --- 1. ТЕКСТ (MARKDOWN) ---\n  const textMatch = html.match(/<div class=\"tgme_widget_message_text[^>]*>([\\s\\S]*?)<\\/div>/);\n  let rawHtml = textMatch ? textMatch[1] : '';\n  \n  let text = rawHtml\n    .replace(/<br\\s*\\/?>/gi, '\\n')\n    .replace(/<b>(.*?)<\\/b>/gi, '**$1**')\n    .replace(/<strong>(.*?)<\\/strong>/gi, '**$1**')\n    .replace(/<i>(.*?)<\\/i>/gi, '_$1_')\n    .replace(/<em>(.*?)<\\/em>/gi, '_$1_')\n    .replace(/<a href=\"([^\"]+)\".*?>(.*?)<\\/a>/gi, '[$2]($1)')\n    .replace(/&quot;/g, '\"')\n    .replace(/&amp;/g, '&')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/<[^>]+>/g, '') // Убираем остальные теги\n    .trim();\n  \n  // Заголовок\n  let title = '';\n  if (text.length > 0) {\n    title = text.length <= 100 ? text : text.substring(0, 100) + '...';\n  }\n  \n  // Дата\n  const dateMatch = html.match(/<time datetime=\"([^\"]+)\"/);\n  let publishedAt = dateMatch ? dateMatch[1] : null;\n  \n  // --- 2. ПРОСМОТРЫ ---\n  let views = 0;\n  // Ищем внутри тега views или просто класс\n  const viewsMatch = html.match(/<span class=\"tgme_widget_message_views\"[^>]*>([\\s\\S]*?)<\\/span>/);\n  if (viewsMatch) {\n    const rawViews = viewsMatch[1].replace(/<[^>]+>/g, '').trim(); // Чистим от тегов внутри\n    if (rawViews.includes('K')) views = Math.round(parseFloat(rawViews.replace('K', '').replace(',', '.')) * 1000);\n    else if (rawViews.includes('M')) views = Math.round(parseFloat(rawViews.replace('M', '').replace(',', '.')) * 1000000);\n    else views = parseInt(rawViews.replace(/[^\\d]/g, '')) || 0;\n  }\n  \n  // --- 3. РЕАКЦИИ ---\n  let totalReactions = 0;\n  // Ищем все блоки реакций\n  const reactionSpans = html.matchAll(/<span class=\"tgme_reaction[^\"]*\">([\\s\\S]*?)<\\/span>/g);\n  \n  for (const match of reactionSpans) {\n    const content = match[1]; // Внутренности реакции\n    let count = 0;\n    \n    // Пытаемся найти число внутри (любое число, возможно с K/M)\n    // Игнорируем html теги, берем только текст\n    const cleanText = content.replace(/<[^>]+>/g, '').trim();\n    const numberMatch = cleanText.match(/([\\d.,]+[KM]?)$/); // Ищем число в конце строки\n    \n    if (numberMatch) {\n       const s = numberMatch[1];\n       if (s.includes('K')) count = Math.round(parseFloat(s.replace('K','').replace(',','.')) * 1000);\n       else if (s.includes('M')) count = Math.round(parseFloat(s.replace('M','').replace(',','.')) * 1000000);\n       else count = parseInt(s.replace(/[^\\d]/g, '')) || 0;\n    }\n    totalReactions += count;\n  }\n\n  // --- 4. КАРТИНКИ ---\n  const images = [];\n  const imageMatches = html.matchAll(/background-image:\\s*url\\(['\"]([^'\"]+)['\"]\\)/g);\n  for (const match of imageMatches) {\n    const url = match[1];\n    if (url.includes('telesco.pe') && !url.includes('telegram.org')) {\n      images.push(url);\n    }\n  }\n\n  // --- 5. РАСЧЕТ ER ---\n  let er = 0;\n  if (views > 0) {\n    er = (totalReactions / views) * 100;\n    er = Math.round(er * 100) / 100;\n  }\n  \n  posts.push({\n    post_id: postId,\n    title: title,\n    text: text,\n    published_at: publishedAt,\n    views: views,\n    images: images,\n    total_reactions: totalReactions,\n    er: er\n  });\n}\n\n// Дедупликация\nconst uniquePostsMap = new Map();\nfor (const post of posts) {\n  if (!uniquePostsMap.has(post.post_id)) {\n    uniquePostsMap.set(post.post_id, post);\n  }\n}\nconst uniquePosts = Array.from(uniquePostsMap.values());\n\nreturn [{\n  json: {\n    posts: uniquePosts,\n    channel_name: $('Set Initial Variables').item.json.channel_name\n  }\n}];"
+      },
+      "id": "2b80680c-616f-56b9-8f69-5401bc5a2243",
+      "name": "Parse Posts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        848,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Set Initial Variables').item.json.supabase_url }}/rest/v1/knowledge_base",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  $json.posts.map(post => ({\n    \"platform\": \"telegram\",\n    \"content\": post.text,\n    \"media_urls\": post.images,\n    \"external_id\": post.post_id.toString(),\n    \"external_url\": `https://t.me/s/${$('Set Initial Variables').item.json.channel_name}/${post.post_id}`,\n    \"views_count\": post.views,\n    \"likes_count\": post.total_reactions,\n    \"er\": post.er,\n    \"published_at\": post.published_at,\n    \"parsed_at\": $now\n  }))\n}}",
+        "options": {}
+      },
+      "id": "12c5ecd8-de96-565c-a056-19a6504b7cde",
+      "name": "Bulk Insert to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1216,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "continue-condition",
+              "leftValue": "={{ $json.continue_loop }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f69b54a0-8bb8-5fe2-9b45-eae8bdbef616",
+      "name": "Continue Loop?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1888,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "update-vars",
+              "name": "channel_name",
+              "value": "={{ $json.channel_name }}",
+              "type": "string"
+            },
+            {
+              "id": "update-oldest",
+              "name": "oldest_post_id",
+              "value": "={{ $json.oldest_post_id }}",
+              "type": "string"
+            },
+            {
+              "id": "update-iteration",
+              "name": "iteration",
+              "value": "={{ $json.iteration }}",
+              "type": "number"
+            },
+            {
+              "id": "update-max",
+              "name": "max_iterations",
+              "value": "={{ $json.max_iterations }}",
+              "type": "number"
+            },
+            {
+              "id": "update-total",
+              "name": "total_posts_collected",
+              "value": "={{ $json.total_posts_collected }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1597e505-2256-530c-bb1e-87f7274e4bd6",
+      "name": "Update Variables",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        288,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "final-message",
+              "name": "final_message",
+              "value": "={{ $json.message }}",
+              "type": "string"
+            },
+            {
+              "id": "final-total",
+              "name": "total_posts_collected",
+              "value": "={{ $json.total_posts_collected }}",
+              "type": "number"
+            },
+            {
+              "id": "final-iterations",
+              "name": "iterations_completed",
+              "value": "={{ $json.iteration }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "38570810-8249-545f-843d-d5a2d8f438f8",
+      "name": "Show Final Stats",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        2192,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const posts = $('Parse Posts').item.json.posts;\n\n// Получаем переменные из Set Initial Variables\nconst channelName = $('Set Initial Variables').item.json.channel_name;\nconst currentIteration = $('Set Initial Variables').item.json.iteration || 0;\nconst maxIterations = $('Set Initial Variables').item.json.max_iterations || 50;\nconst previousTotal = $('Set Initial Variables').item.json.total_posts_collected || 0;\n\n// Если постов нет - возвращаем метаданные с флагом остановки\nif (!posts || posts.length === 0) {\n  return [{\n    json: {\n      channel_name: channelName,\n      oldest_post_id: \"\",\n      iteration: currentIteration + 1,\n      max_iterations: maxIterations,\n      total_posts_collected: previousTotal,\n      posts_in_batch: 0,\n      continue_loop: false,\n      message: \"No posts found - stopping loop\"\n    }\n  }];\n}\n\n// Сортируем посты по post_id (числовая сортировка)\nconst sortedPosts = posts.sort((a, b) => {\n  const idA = parseInt(a.post_id);\n  const idB = parseInt(b.post_id);\n  return idA - idB;\n});\n\n// Берём ID самого старого (первого) поста\nconst oldestPostId = sortedPosts[0].post_id;\nconst postsCount = posts.length;\nconst newTotal = previousTotal + postsCount;\n\n// Решаем продолжать ли цикл\nconst continueLoop = postsCount >= 5 && currentIteration < maxIterations;\n\n// Возвращаем метаданные для управления циклом\nreturn [{\n  json: {\n    channel_name: channelName,\n    oldest_post_id: oldestPostId,\n    iteration: currentIteration + 1,\n    max_iterations: maxIterations,\n    total_posts_collected: newTotal,\n    posts_in_batch: postsCount,\n    continue_loop: continueLoop,\n    message: `Iteration ${currentIteration + 1}: Collected ${postsCount} posts. Total: ${newTotal}. ${continueLoop ? 'Continuing...' : 'Stopping.'}`\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        544
+      ],
+      "id": "7534d402-7ce8-5fb9-bc76-faf10c6d0e94",
+      "name": "Prepare Database Result"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Собираем все настройки в удобный объект\nconst settings = {};\n\nconst items = $input.all();\n\nitems.forEach(item => {\n  const key = item.json.setting_key;\n  const value = item.json.setting_value;\n  settings[key] = value;\n});\n\n// Возвращаем один объект со всеми настройками\nreturn [{\n  json: {\n    admin_chat_id: settings.admin_chat_id,\n    days_before_ideas: settings.days_before_ideas,\n    supabase_url: settings.supabase_url,\n    default_channel_name: settings.default_channel_name\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1040,
+        528
+      ],
+      "id": "24ca4d9b-691f-5bd0-9eea-ad779c6e9adf",
+      "name": "Prepare Settings"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "system_settings",
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1296,
+        528
+      ],
+      "id": "cda7efab-1282-50de-8e8c-66959ac92ce9",
+      "name": "Get System Settings"
+    },
+    {
+      "parameters": {
+        "amount": "={{ Math.floor(Math.random() * 4) + 2 }}"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        96,
+        544
+      ],
+      "id": "88ee79c6-b5b6-5b5f-b029-ff840c512a3d",
+      "name": "Wait Before Next Telegram Page"
+    }
+  ],
+  "connections": {
+    "Manual: Start Telegram Ingestion": {
+      "main": [
+        [
+          {
+            "node": "Get System Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Initial Variables": {
+      "main": [
+        [
+          {
+            "node": "Loop Until All Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Until All Posts": {
+      "main": [
+        [
+          {
+            "node": "Update Variables",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait Before Next Telegram Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram: Fetch Source Page": {
+      "main": [
+        [
+          {
+            "node": "Extract Posts HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Posts HTML": {
+      "main": [
+        [
+          {
+            "node": "Parse Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Posts": {
+      "main": [
+        [
+          {
+            "node": "Bulk Insert to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bulk Insert to Supabase": {
+      "main": [
+        [
+          {
+            "node": "Prepare Database Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continue Loop?": {
+      "main": [
+        [
+          {
+            "node": "Loop Until All Posts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Show Final Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Database Result": {
+      "main": [
+        [
+          {
+            "node": "Continue Loop?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Settings": {
+      "main": [
+        [
+          {
+            "node": "Set Initial Variables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get System Settings": {
+      "main": [
+        [
+          {
+            "node": "Prepare Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before Next Telegram Page": {
+      "main": [
+        [
+          {
+            "node": "Telegram: Fetch Source Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

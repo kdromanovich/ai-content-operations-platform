@@ -1,0 +1,4019 @@
+{
+  "name": "07 | AI Video Production and Distribution",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "31469490-3544-5e06-9784-f77a94eb7f10",
+      "name": "Manual Test Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -95328,
+        22608
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    body: {\n      post: {\n        ID: `sample-video-${Date.now()}`,\n        post_title: 'Как еженедельный прогноз помогает управлять денежным потоком',\n        post_content: 'Демонстрационная компания по понедельникам сверяет ожидаемые поступления, просроченные счета и ближайшие платежи. Такой ритм заранее показывает риск кассового разрыва и помогает назначить ответственных за действия.',\n        post_status: 'publish',\n        link: 'https://example.com/sample-video-source/'\n      }\n    }\n  }\n}];"
+      },
+      "id": "1576cf61-16dc-5944-9337-22d85ab5da65",
+      "name": "Test Fixture: Sample Business Topic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -95104,
+        22608
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "content-ops-video-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "c6bb5929-2cdf-5f02-9556-e193621e19d8",
+      "name": "WordPress Video Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -95104,
+        22800
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json || {};\nconst post = body.post || body || {};\n\nconst rawId =\n  post.ID ||\n  post.id ||\n  post.post_id ||\n  post.postId ||\n  body.ID ||\n  body.id ||\n  body.post_id ||\n  body.postId ||\n  Date.now();\n\nconst postId = String(rawId).trim();\n\nconst rawTitle =\n  post.post_title ||\n  post.title ||\n  body.post_title ||\n  body.title ||\n  '';\n\nconst title = String(rawTitle || 'Без заголовка').trim();\n\nlet content = String(\n  post.post_content ||\n  post.content ||\n  post.description ||\n  body.post_content ||\n  body.content ||\n  body.description ||\n  ''\n).trim();\n\ncontent = content\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, '')\n  .replace(/<style[\\s\\S]*?<\\/style>/gi, '')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/&nbsp;/g, ' ')\n  .replace(/&amp;/g, '&')\n  .replace(/&quot;/g, '\"')\n  .replace(/&#039;/g, \"'\")\n  .replace(/&laquo;/g, '«')\n  .replace(/&raquo;/g, '»')\n  .replace(/&mdash;/g, '—')\n  .replace(/\\s+/g, ' ')\n  .trim();\n\nif (!content && !String(rawTitle || '').trim()) {\n  throw new Error('Нет текста/заголовка входящего поста');\n}\n\nconst sourceUrl =\n  post.guid?.rendered ||\n  post.link ||\n  body.link ||\n  post.url ||\n  body.url ||\n  '';\n\nreturn {\n  json: {\n    post_id: postId,\n    title,\n    content,\n    source_url: sourceUrl,\n    wp_status: post.post_status || post.status || body.post_status || body.status || '',\n    webhook_secret:\n      $json.headers?.['x-content-ops-secret'] ||\n      body.secret || body.token || body.webhook_secret || '',\n    received_at: new Date().toISOString()\n  }\n};"
+      },
+      "id": "2a827cbb-10b5-5ab7-9083-8375282fb5be",
+      "name": "Normalize Webhook Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -94880,
+        22704
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const isManualExecution = $execution.mode === 'manual';\nconst expectedSecret = String($vars.CONTENT_OPS_WEBHOOK_SECRET || '').trim();\nconst providedSecret = String($json.webhook_secret || '').trim();\n\nconst safe = { ...$json };\ndelete safe.webhook_secret;\n\nif (!isManualExecution && !expectedSecret) {\n  return {\n    json: {\n      ...safe,\n      should_continue: false,\n      skip_reason: 'CONTENT_OPS_WEBHOOK_SECRET is not configured'\n    }\n  };\n}\n\nif (!isManualExecution && providedSecret !== expectedSecret) {\n  return {\n    json: {\n      ...safe,\n      should_continue: false,\n      skip_reason: 'Invalid webhook secret'\n    }\n  };\n}\n\nconst status = String($json.wp_status || '').toLowerCase().trim();\nif (status && !['publish', 'published'].includes(status)) {\n  return {\n    json: {\n      ...safe,\n      should_continue: false,\n      skip_reason: `Post is not published. wp_status=${status}`\n    }\n  };\n}\n\nreturn {\n  json: {\n    ...safe,\n    should_continue: true,\n    skip_reason: ''\n  }\n};"
+      },
+      "id": "6622343c-7c1e-5367-8d76-3c559494c11f",
+      "name": "Validate Secret, Status, and Idempotency Key",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -94656,
+        22704
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "video_jobs",
+        "limit": 1,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "post_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.post_id }}"
+            }
+          ]
+        }
+      },
+      "id": "b82a0111-a2a3-50ed-816b-3af361893bf0",
+      "name": "Database: Check Existing Job",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -94432,
+        22704
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const base = $('Validate Secret, Status, and Idempotency Key').item.json;\nconst rows = $input.all()\n  .map(i => i.json || {})\n  .filter(r => r && Object.keys(r).length && r.post_id);\n\nconst existing = rows[0] || null;\n\nif (!base.should_continue) {\n  return { json: base };\n}\n\nif (existing) {\n  return {\n    json: {\n      ...base,\n      should_continue: false,\n      skip_reason: `post_id=${base.post_id} уже есть в Supabase со статусом ${existing.status || 'unknown'}`,\n      existing_job: existing\n    }\n  };\n}\n\nreturn {\n  json: {\n    ...base,\n    should_continue: true,\n    skip_reason: '',\n    existing_job: null\n  }\n};"
+      },
+      "id": "148f1089-4300-5aeb-95f7-c8efee960e3a",
+      "name": "Evaluate Existing Job",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -94208,
+        22704
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.should_continue }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "b1854fe3-36e1-5a64-9dd9-1af734dfbb46",
+      "name": "Continue Generation?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -93984,
+        22704
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "video_jobs",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "post_id",
+              "fieldValue": "={{ $json.post_id }}"
+            },
+            {
+              "fieldId": "title",
+              "fieldValue": "={{ $json.title }}"
+            },
+            {
+              "fieldId": "source_url",
+              "fieldValue": "={{ $json.source_url }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "processing"
+            },
+            {
+              "fieldId": "skip_reason"
+            },
+            {
+              "fieldId": "error"
+            },
+            {
+              "fieldId": "updated_at",
+              "fieldValue": "={{ new Date().toISOString() }}"
+            }
+          ]
+        }
+      },
+      "id": "85379ee8-459d-5aa2-bb28-d0c84379491c",
+      "name": "Database: Create Processing Job",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -93760,
+        21792
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const base = $('Evaluate Existing Job').item.json;\nconst created = $input.first()?.json || null;\n\nreturn {\n  json: {\n    ...base,\n    supabase_job: created\n  }\n};"
+      },
+      "id": "8092cc23-a3d6-59c0-b45e-ce8ccc02dc5f",
+      "name": "Merge Processing Job Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -93536,
+        21792
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, status: 'skipped', post_id: $json.post_id, reason: $json.skip_reason } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "46f01c00-304a-5df4-aec1-563f887bc86f",
+      "name": "Webhook Response: Skipped",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -93760,
+        22800
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, status: 'accepted', post_id: $json.post_id, message: 'Пост принят. Запущены 3 разные версии HeyGen; каждая автоматически уйдет в свою сетку после завершения рендера.' } }}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "5bb83804-f57b-5dde-8afb-3b315fbc9591",
+      "name": "Webhook Response: Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -93312,
+        21792
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "model": "gpt-5.1",
+        "prompt": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "=Ты — режиссёр, редактор и voice director проекта Business Media Project.\n\nНужно создать РОВНО ТРИ разные версии одного исходного поста для трёх сеток аккаунтов.\nВсе три ролика должны быть выполнены в ОДНОМ И ТОМ ЖЕ премиальном кинематографичном уровне, в едином профессиональном визуальном стиле.\n\nКЛЮЧЕВОЙ ПРИНЦИП:\nНЕ делай три разных уровня/жанра качества.\nНЕ делай одну версию аналитической, вторую киношной, третью клиповой.\nВсе три — premium cinematic expert social video.\nРазличаются только:\n- смысловой угол;\n- hook;\n- порядок аргументов;\n- точный текст речи;\n- эмоциональная дуга;\n- конкретный B-roll;\n- отдельные тексты соцсетей.\n\nЕДИНЫЙ ВИЗУАЛЬНЫЙ СТИЛЬ:\n- начало: ведущий сразу в кадре, полукрупный или близкий план, прямой контакт;\n- мягкий профессиональный боковой/фронтально-боковой свет;\n- фон слегка расфокусирован, премиальный и реалистичный;\n- на хуке допускается короткий быстрый релевантный B-roll;\n- дальше плавная смена крупности: close-up на ключевых мыслях, medium shot на объяснениях;\n- B-roll появляется только когда он усиливает конкретную произнесённую мысль;\n- ведущий остаётся главным героем и отчётливо появляется в начале и в конце;\n- визуалы должны давать ощущение «взгляда изнутри бизнеса», а не случайного stock montage;\n- цвета естественные, слегка тёплые/кинематографичные;\n- никаких дешёвых TikTok-эффектов, Breaking News, телеканальных плашек, хаоса и лишней графики.\n\nФАКТЫ:\n- только русский язык;\n- используй ТОЛЬКО факты исходного поста;\n- не выдумывай цифры, даты, имена, причины, обещания, цитаты или выводы;\n- не делай сенсацию из нейтральной темы.\n\nДЛИТЕЛЬНОСТЬ — КРИТИЧЕСКИЙ CREDIT-SAFE ЛИМИТ ДО 30 СЕКУНД:\n- каждый spoken_script должен содержать ориентировочно 30–36 русских слов ДО финального CTA;\n- абсолютный максимум — 36 слов ДО CTA;\n- можно писать короче, если смысл сохраняется; нижнего лимита нет;\n- downstream добавит фиксированный CTA из 8 слов, поэтому общий текст останется примерно до 44 слов;\n- выбери только ОДНУ главную мысль и 1–2 самых сильных факта исходного поста;\n- НЕ пересказывай весь исходный текст;\n- не повторяй одну мысль разными словами;\n- не добавляй вступления, выводы или паузы ради длины;\n- HeyGen должен получить короткий сценарий, рассчитанный примерно на 22–28 секунд естественной речи и НИКОГДА не должен намеренно растягивать его до 30+ секунд;\n- после HeyGen FFmpeg дополнительно ускоряет минимум в 1.2 раза;\n- финальный MP4 обязан быть не длиннее 30.0 секунды.\n\nЖИВАЯ РУССКАЯ РЕЧЬ:\n- звучит как реальный предприниматель/эксперт, говорящий одному человеку;\n- тёпло, уверенно, разговорно, выразительно;\n- чередуй короткие и средние предложения;\n- используй запятые, тире, двоеточия, точки, вопросы как естественные подсказки просодии;\n- МНОГОТОЧИЯ ЗАПРЕЩЕНЫ: не использовать «…», \"..\", \"...\";\n- не добавлять длинные искусственные паузы;\n- не использовать канцелярит и дикторский ритм;\n- CTA в самом конце spoken_script ТОЧНО:\n«Подписывайся на канал, чтобы не пропустить новые разборы.»\n\nПРОИЗНОШЕНИЕ / УДАРЕНИЯ:\n- spoken_script — чистый текст для визуального использования;\n- pronunciation_script — слово в слово тот же текст и та же пунктуация;\n- единственное разрешённое отличие pronunciation_script — знак U+0301 сразу ПОСЛЕ ударной гласной в потенциально проблемных словах;\n- ставь ударение только если есть реальный риск ошибки TTS;\n- если не уверен — не ставь;\n- U+0301 существует ТОЛЬКО для скрытой TTS-инструкции и никогда не должен быть визуальным текстом.\n\nDELIVERY_DIRECTION:\nДля каждого ролика дай конкретную эмоциональную дугу.\nПример логики: начало — лёгкое удивление/вовлечение; объяснение — спокойнее и обстоятельнее; перечисление — живее; финал — уверенно и мягко.\nАдаптируй под конкретную тему, не копируй механически.\n\nVISUAL_DIRECTION:\nДля каждого ролика конкретно опиши:\n- стартовый план;\n- свет;\n- фон;\n- где close-up, где medium shot;\n- где появляется B-roll и зачем;\n- каким должен быть ритм;\n- каким кадром возвращаемся к ведущему в финале.\n\nB-ROLL:\n4–7 конкретных визуальных сцен/объектов, которые прямо подтверждают речь.\nНикакого случайного стока.\n\nON-SCREEN TEXT:\n- hook_overlay: 1–3 целых слова, желательно до 26 символов;\n- остальные overlay — максимум 2–4 целых слова;\n- никаких многоточий;\n- никаких разрывов слова посередине;\n- никаких hyphenation типа «ПРОМЫШЛ / ЕННЫЙ».\n\nSUBTITLES:\n- визуально чистый русский текст БЕЗ U+0301;\n- максимум 2 строки;\n- целые слова;\n- центральная safe-zone;\n- не перекрывать лицо.\n\nОПИСАНИЯ:\nYouTube: title до 60 символов, description 100–240, до 5 hashtags.\nInstagram: description 100–240, до 5 hashtags.\nTikTok: description 100–220, до 5 hashtags.\nThreads: description 100–240, до 5 hashtags.\nТексты трёх сеток должны отличаться.\n\nВЕРНИ СТРОГО JSON БЕЗ MARKDOWN:\n{\n  \"variants\":[\n    {\n      \"branch\":1,\n      \"concept\":\"\",\n      \"spoken_script\":\"\",\n      \"pronunciation_script\":\"\",\n      \"delivery_direction\":\"\",\n      \"hook_overlay\":\"\",\n      \"visual_direction\":\"\",\n      \"broll_keywords\":[\"\",\"\",\"\",\"\"],\n      \"youtube\":{\"title\":\"\",\"description\":\"\",\"hashtags\":[\"\",\"\",\"\",\"\",\"\"]},\n      \"instagram\":{\"description\":\"\",\"hashtags\":[\"\",\"\",\"\",\"\",\"\"]},\n      \"tiktok\":{\"description\":\"\",\"hashtags\":[\"\",\"\",\"\",\"\",\"\"]},\n      \"threads\":{\"description\":\"\",\"hashtags\":[\"\",\"\",\"\",\"\",\"\"]}\n    },\n    {\n      \"branch\":2,\n      \"concept\":\"\",\n      \"spoken_script\":\"\",\n      \"pronunciation_script\":\"\",\n      \"delivery_direction\":\"\",\n      \"hook_overlay\":\"\",\n      \"visual_direction\":\"\",\n      \"broll_keywords\":[\"\",\"\",\"\",\"\"],\n      \"youtube\":{\"title\":\"\",\"description\":\"\",\"hashtags\":[\"\",\"\",\"\",\"\",\"\"]},\n      \"instagram\":{\"description\":\"\",\"hashtags\":[\"\",\"\",\"\",\"\",\"\"]},\n      \"tiktok\":{\"description\":\"\",\"hashtags\":[\"\",\"\",\"\",\"\",\"\"]},\n      \"threads\":{\"description\":\"\",\"hashtags\":[\"\",\"\",\"\",\"\",\"\"]}\n    },\n    {\n      \"branch\":3,\n      \"concept\":\"\",\n      \"spoken_script\":\"\",\n      \"pronunciation_script\":\"\",\n      \"delivery_direction\":\"\",\n      \"hook_overlay\":\"\",\n      \"visual_direction\":\"\",\n      \"broll_keywords\":[\"\",\"\",\"\",\"\"],\n      \"youtube\":{\"title\":\"\",\"description\":\"\",\"hashtags\":[\"\",\"\",\"\",\"\",\"\"]},\n      \"instagram\":{\"description\":\"\",\"hashtags\":[\"\",\"\",\"\",\"\",\"\"]},\n      \"tiktok\":{\"description\":\"\",\"hashtags\":[\"\",\"\",\"\",\"\",\"\"]},\n      \"threads\":{\"description\":\"\",\"hashtags\":[\"\",\"\",\"\",\"\",\"\"]}\n    }\n  ]\n}"
+            },
+            {
+              "content": "=ЗАГОЛОВОК:\n{{ $json.title }}\n\nТЕКСТ ПОСТА:\n{{ $json.content }}\n\nССЫЛКА НА ИСТОЧНИК:\n{{ $json.source_url }}"
+            }
+          ]
+        },
+        "simplifyOutput": false,
+        "options": {
+          "temperature": 0.35
+        },
+        "requestOptions": {}
+      },
+      "id": "17d68f5a-3203-5cb9-9039-a864bf969f8d",
+      "name": "OpenAI: Generate 3 Scripts and Captions",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        -93088,
+        21792
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function stripStressMarks(v){ return String(v ?? '').replace(/\\u0301/g,''); }\nconst input = $input.item.json;\nlet content = input.choices?.[0]?.message?.content || input.message?.content || input.content || input.output?.[0]?.content?.[0]?.text || '';\ncontent = String(content).replace(/```json/gi,'').replace(/```/g,'').trim();\nlet parsed;\ntry { parsed = JSON.parse(content); } catch (e) {\n  const m = content.match(/\\{[\\s\\S]*\\}/);\n  if (!m) throw new Error('OpenAI не вернул JSON: ' + content.slice(0,700));\n  parsed = JSON.parse(m[0]);\n}\n\nconst base = $('Merge Processing Job Context').item.json;\nconst CTA = 'Подписывайся на канал, чтобы не пропустить новые разборы.';\nconst STRESS = '\\u0301';\n\nfunction clean(v){\n  return String(v??'')\n    .replace(/[\\u0000-\\u001F\\u007F]/g,' ')\n    .replace(/\\s+/g,' ')\n    .trim();\n}\nfunction cleanSpeech(v){\n  return String(v??'')\n    .replace(/[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]/g,' ')\n    .replace(/[ \\t]+/g,' ')\n    .replace(/\\n{3,}/g,'\\n\\n')\n    .trim();\n}\nfunction stripStress(v){\n  return String(v??'').normalize('NFD').replace(/\\u0301/g,'').normalize('NFC');\n}\nfunction countWords(v){\n  return (String(v||'').match(/[\\p{L}\\p{N}]+(?:-[\\p{L}\\p{N}]+)?/gu)||[]).length;\n}\nfunction hashtags(v,max=5){\n  const a=Array.isArray(v)?v:String(v||'').split(/[\\s,;]+/);\n  const out=[]; const seen=new Set();\n  for(let x of a){\n    x=clean(x).replace(/^#+/,'').replace(/[^\\p{L}\\p{N}_]/gu,'');\n    if(!x||/^новости$/iu.test(x))continue;\n    const t='#'+x,k=t.toLowerCase();\n    if(seen.has(k))continue;\n    seen.add(k); out.push(t);\n    if(out.length>=max)break;\n  }\n  return out.join(' ');\n}\nfunction shortText(v,max){\n  let s=clean(v).replace(/…+/gu,'.').replace(/\\.{2,}/g,'.');\n  if(s.length<=max)return s;\n  const parts=s.split(/(?<=[.!?])\\s+/u);\n  let o='';\n  for(const p of parts){const n=o?o+' '+p:p;if(n.length>max)break;o=n;}\n  return o||s.slice(0,max).replace(/\\s+\\S*$/u,'').trim();\n}\nfunction overlayText(v,max=26){\n  let s=clean(v).replace(/…+/gu,'').replace(/\\.{2,}/g,'.').replace(/[.!?;:,]+$/g,'').trim();\n  const words=s.split(/\\s+/).filter(Boolean).slice(0,4);\n  let out='';\n  for(const w of words){const next=out?out+' '+w:w;if(next.length>max)break;out=next;}\n  return out || words[0] || '';\n}\n\nconst reps=[\n  ['ФНС России','Федеральная налоговая служба России'],\n  ['ФНС','Федеральная налоговая служба'],\n  ['ИП','индивидуальный предприниматель'],\n  ['ООО','общество с ограниченной ответственностью'],\n  ['НДС','налог на добавленную стоимость'],\n  ['НДФЛ','налог на доходы физических лиц'],\n  ['УСН','упрощенная система налогообложения'],\n  ['ПСН','патентная система налогообложения'],\n  ['ОСНО','общая система налогообложения'],\n  ['ЕНС','единый налоговый счет'],\n  ['ККТ','контрольно-кассовая техника'],\n  ['ЦБ РФ','Центральный банк России'],\n  ['ЦБ','Центральный банк']\n];\n\nfunction removeOldCTA(s){\n  return String(s||'')\n    .replace(/Хочешь узнать больше о предпринимательстве[?!,. …—-]*переходи в шапку профиля\\.?/giu,'')\n    .replace(/Хочешь узнать больше о предпринимательстве[?!,. …—-]*/giu,'')\n    .replace(/Переходи в шапку профиля\\.?/giu,'')\n    .replace(/Ссылка в (?:шапке )?профиля\\.?/giu,'')\n    .replace(/Ссылка в описании\\.?/giu,'')\n    .replace(/Подписывайся на канал, чтобы не пропустить новые разборы\\.?/giu,'')\n    .trim();\n}\n\nfunction expandAbbreviations(s){\n  for(const [a,b] of reps){\n    s=s.replace(new RegExp(`(^|[^\\\\p{L}\\\\p{N}_])${a.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&')}(?=$|[^\\\\p{L}\\\\p{N}_])`,'giu'),`$1${b}`);\n  }\n  return s;\n}\n\nfunction baseSpeech(v){\n  let s=removeOldCTA(cleanSpeech(v))\n    .replace(/…+/gu,'.')\n    .replace(/\\.{2,}/g,'.')\n    .replace(/\\s+([,.;:!?])/g,'$1')\n    .replace(/([,.;:!?])(?=[^\\s»”])/g,'$1 ')\n    .trim();\n  s=expandAbbreviations(s)\n    .replace(/\\s+([,.;:!?])/g,'$1')\n    .replace(/([,.;:!?])(?=[^\\s»”])/g,'$1 ')\n    .trim();\n  if(s && !/[.!?]$/u.test(s)) s += '.';\n  return s;\n}\n\nfunction makePronunciation(rawPron, cleanBase){\n  if(!rawPron) return cleanBase;\n  let p=baseSpeech(rawPron);\n  // pronunciation_script is accepted ONLY if it differs from clean script by U+0301 stress marks.\n  const a=stripStress(p).replace(/\\s+/g,' ').trim();\n  const b=stripStress(cleanBase).replace(/\\s+/g,' ').trim();\n  if(a !== b) return cleanBase;\n  // Reject suspicious over-annotation: stress marks should be sparse, not on every word.\n  const marks=(p.match(/\\u0301/g)||[]).length;\n  const words=(p.match(/[\\p{L}Ёё]+/gu)||[]).length;\n  if(words>0 && marks > Math.max(12, Math.ceil(words*0.22))) return cleanBase;\n  return p;\n}\n\nfunction makePlainPronunciationHints(accented){\n  // ВАЖНО: actual U+0301 существует только внутри этой функции.\n  // На выходе — обычный текст БЕЗ любых accent characters.\n  const text=String(accented||'').normalize('NFD');\n  const tokens=text.match(/[\\p{L}\\p{M}-]+/gu)||[];\n  const vowels=new Set(Array.from('аеёиоуыэюяАЕЁИОУЫЭЮЯ'));\n  const out=[];\n  const seen=new Set();\n\n  for(const token of tokens){\n    if(!token.includes('\\u0301')) continue;\n\n    let syllable=0;\n    let stressed=0;\n    const chars=Array.from(token);\n\n    for(let i=0;i<chars.length;i++){\n      const ch=chars[i];\n      if(vowels.has(ch)){\n        syllable++;\n        // Accent may follow the vowel immediately or after another combining mark (e.g. ё decomposition).\n        let j=i+1;\n        while(j<chars.length && /\\p{M}/u.test(chars[j])){\n          if(chars[j]==='\\u0301') stressed=syllable;\n          j++;\n        }\n      }\n    }\n\n    const word=token\n      .replace(/[\\u0300\\u0301\\u0340\\u0341]/g,'')\n      .normalize('NFC');\n\n    if(!word || !stressed) continue;\n    const key=word.toLowerCase();\n    if(seen.has(key)) continue;\n    seen.add(key);\n\n    out.push(`${word}: ударение на ${stressed}-м слоге`);\n    if(out.length>=12) break;\n  }\n\n  return out;\n}\n\nif(!Array.isArray(parsed.variants)||parsed.variants.length!==3) throw new Error('Нужно ровно 3 variants');\nconst branches=new Set();\nconst variants=parsed.variants.map((v,i)=>{\n  const branch=Number(v.branch)||i+1;\n  branches.add(branch);\n  const baseSc=baseSpeech(v.spoken_script);\n  if(!baseSc || baseSc.length < 10) throw new Error(`Сетка ${branch}: spoken_script пустой`);\n  const pronBase=makePronunciation(v.pronunciation_script, baseSc);\n  const pronunciationHints=makePlainPronunciationHints(pronBase);\n\n  // Ограничение длительности: блокируем слишком длинный текст до запроса HeyGen. Нижнего лимита нет.\n  const bodyWordCount=countWords(baseSc);\n  if(bodyWordCount>36){\n    throw new Error(`CREDIT_GUARD MAX30: сетка ${branch} содержит ${bodyWordCount} слов до CTA. Максимум 36. HeyGen НЕ будет вызван.`);\n  }\n\n  const spoken=stripStress(`${baseSc} ${CTA}`.replace(/\\s+/g,' ').trim());\n  const totalWordCount=countWords(spoken);\n  if(totalWordCount>44){\n    throw new Error(`CREDIT_GUARD MAX30: сетка ${branch} содержит ${totalWordCount} слов вместе с CTA. Максимум 44. HeyGen НЕ будет вызван.`);\n  }\n\n  return {\n    branch,\n    concept:stripStress(clean(v.concept)),\n    spoken_script:spoken,                  // Единственный текст речи, который идёт в HeyGen: БЕЗ accent chars\n    pronunciation_script:spoken,           // Downstream тоже БЕЗ accent chars\n    tts_script:spoken,                     // Downstream тоже БЕЗ accent chars\n    pronunciation_hints:pronunciationHints,// Только plain-language: «слово: ударение на 2-м слоге»\n    pronunciation_marks_count:pronunciationHints.length,\n    script_words_before_cta:bodyWordCount,\n    script_words_total:totalWordCount,\n    delivery_direction:stripStress(clean(v.delivery_direction || (branch===1?'Тёплая уверенная экспертная подача с естественными смысловыми акцентами.':branch===2?'Личная вовлечённая подача с живой эмоциональной дугой.':'Энергичная, любопытная и уверенная подача без спешки.'))),\n    hook_overlay:stripStress(overlayText(v.hook_overlay,26)),\n    visual_direction:stripStress(clean(v.visual_direction)),\n    broll_keywords:(Array.isArray(v.broll_keywords)?v.broll_keywords:[]).map(x=>stripStress(clean(x))).filter(Boolean).slice(0,7),\n    youtube_title:shortText(v.youtube?.title||v.hook_overlay||base.title,60),\n    youtube_desc:shortText(v.youtube?.description,240),\n    youtube_hashtags:hashtags(v.youtube?.hashtags),\n    instagram_text:shortText(v.instagram?.description,240),\n    instagram_hashtags:hashtags(v.instagram?.hashtags),\n    tiktok_text:shortText(v.tiktok?.description,220),\n    tiktok_hashtags:hashtags(v.tiktok?.hashtags),\n    threads_text:shortText(v.threads?.description,240),\n    threads_hashtags:hashtags(v.threads?.hashtags)\n  };\n});\nif(branches.size!==3||![1,2,3].every(x=>branches.has(x))) throw new Error('branches должны быть 1,2,3');\nreturn {json:{...base,variants}};"
+      },
+      "id": "bb608eee-09de-5964-a8aa-8310ed959eae",
+      "name": "Parse and Validate 3 Content Sets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -92864,
+        21792
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.heygen.com/v3/video-agents/styles?limit=50",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "heyGenApi",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "2a2817a1-2e16-5fe8-9bdf-5b9225075e3b",
+      "name": "HeyGen: List Available Styles",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -92640,
+        21792
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Optional. Leave the n8n variable empty to use HeyGen styles without a Brand System.\nconst BRAND_KIT_ID = String($vars.HEYGEN_BRAND_KIT_ID || '').trim();\nreturn { json: { brand_kit_id: BRAND_KIT_ID } };"
+      },
+      "id": "c6b98bc8-84af-5042-83c8-35049ce6733c",
+      "name": "Build Generic Video Style Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -92416,
+        21792
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const base=$('Parse and Validate 3 Content Sets').item.json;\nconst stylesRaw=$('HeyGen: List Available Styles').item.json;\nconst styles=(stylesRaw.data||stylesRaw||[]).filter(x=>x&&x.style_id);\nconst portrait=styles.filter(x=>String(x.aspect_ratio||'').includes('9:16')||/portrait/i.test(String(x.aspect_ratio||'')));\nconst pool=(portrait.length>=3?portrait:styles).slice();\nconst BRAND_KIT_ID=String($json.brand_kit_id||'').trim();\n\n// Configured avatar IDs.\nconst AVATARS = [\n  String($vars.HEYGEN_AVATAR_ID_1 || '').trim(),\n  String($vars.HEYGEN_AVATAR_ID_2 || '').trim(),\n  String($vars.HEYGEN_AVATAR_ID_3 || '').trim()\n];\nconst VOICE = String($vars.HEYGEN_VOICE_ID || '').trim();\n\n// HeyGen сейчас отклоняет prompt > 10000 символов.\n// Держим безопасный запас, чтобы система не зависела от пограничного значения.\nconst MAX_PROMPT_CHARS=9200;\n\nif (AVATARS.some(id => !id) || !VOICE) {\n  throw new Error('Configure HEYGEN_AVATAR_ID_1..3 and HEYGEN_VOICE_ID in n8n variables');\n}\n\nfunction h(s){\n  let x=100000001;\n  for(const c of String(s)){x^=c.charCodeAt(0);x=Math.imul(x,16777619);}\n  return x>>>0;\n}\n\nfunction clean(v){\n  return String(v??'')\n    .replace(/[\\u0000-\\u001F\\u007F]/g,' ')\n    .replace(/\\s+/g,' ')\n    .trim();\n}\n\nfunction stripStress(v){\n  // Снимаем только accent/stress marks. Не удаляем U+0308, поэтому «ё» сохраняется.\n  return String(v ?? '')\n    .normalize('NFD')\n    .replace(/[\\u0300\\u0301\\u0340\\u0341]/g,'')\n    .normalize('NFC');\n}\n\nfunction deepStripStress(value){\n  if(Array.isArray(value)) return value.map(deepStripStress);\n  if(value && typeof value==='object'){\n    const out={};\n    for(const [k,v] of Object.entries(value)) out[k]=deepStripStress(v);\n    return out;\n  }\n  return typeof value==='string' ? stripStress(value) : value;\n}\n\nfunction countWords(v){\n  return (String(v||'').match(/[\\p{L}\\p{N}]+(?:-[\\p{L}\\p{N}]+)?/gu)||[]).length;\n}\n\nfunction limitWhole(v,max){\n  const s=clean(v);\n  if(s.length<=max) return s;\n  const words=s.split(/\\s+/).filter(Boolean);\n  const out=[];\n  let len=0;\n  for(const w of words){\n    const next=len+(out.length?1:0)+w.length;\n    if(next>max) break;\n    out.push(w);\n    len=next;\n  }\n  return out.join(' ');\n}\n\nconst avatars=AVATARS.slice()\n  .sort((a,b)=>h(base.post_id+a)-h(base.post_id+b))\n  .slice(0,3);\n\n// Use one consistent render style across all three videos.\nconst PRIMARY_STYLE_ID=String($json.primary_style_id||'').trim();\nfunction choosePrimaryStyle(){\n  if(PRIMARY_STYLE_ID) return PRIMARY_STYLE_ID;\n  const priorities=['cinematic','professional'];\n  for(const tag of priorities){\n    const x=pool.find(s=>(s.tags||[]).some(t=>String(t).toLowerCase()===tag));\n    if(x) return x.style_id;\n  }\n  return pool[0]?.style_id||null;\n}\nconst primaryStyleId=choosePrimaryStyle();\n\nfunction buildPrompt(v,speech,level){\n  // Dynamic fields are the ONLY parts we shorten if the 10k API limit is approached.\n  // The shared style instructions stay unchanged.\n  const delivery=limitWhole(v.delivery_direction, level===0?650:(level===1?430:260));\n  const concept=limitWhole(v.concept, level===0?360:(level===1?240:160));\n  const directing=limitWhole(v.visual_direction, level===0?1200:(level===1?720:360));\n  const broll=(v.broll_keywords||[])\n    .map(x=>stripStress(limitWhole(x,90)))\n    .filter(Boolean)\n    .slice(0,level===0?7:(level===1?5:3));\n\n  return `Create ONE premium vertical 9:16 SHORT-FORM expert social video in Russian. Use the exact supplied script and NEVER add spoken words, filler, repeated conclusions, extra narration or long pauses. Keep natural human pacing. Target the HeyGen render around 22–28 seconds and NEVER intentionally pad it beyond 30 seconds. The script is deliberately short to protect HeyGen credits. A separate FFmpeg step will apply at least 1.2x speed. Do not add pauses, extra narration, extra spoken CTA, intros or outros that increase duration.\n\nVOICE LOCK — ABSOLUTE REQUIREMENT:\n\n- Use the exact assigned HeyGen voice ID ${VOICE} for 100% of all spoken audio.\n- The assigned avatar already has this same voice set as its default, but the explicit voice_id must still be honored.\n- Use ONE narrator only. Never introduce a second narrator, character voice, dialogue voice, stock voice, replacement voice, or alternate TTS voice.\n- If the video cuts to B-roll, the SAME locked narration continues.\n- Do not pitch-shift, time-stretch, vocode, add reverb, chorus, voice filters, or any effect that changes the narrator's timbre.\n- Keep the narration clean, dry, full-range and natural. Background music must stay clearly below speech and must not trigger audible pumping or distortion.\n\nPRONUNCIATION GUIDE — NEVER DISPLAY:\n${(v.pronunciation_hints||[]).length ? (v.pronunciation_hints||[]).map(x=>'- '+stripStress(x)).join('\\n') : '- No special pronunciation hints.'}\nThese are hidden pronunciation instructions only. Never render this guide as captions, titles, overlays, labels, graphics or B-roll text.\n\nUSE THIS EXACT CLEAN VOICEOVER SCRIPT VERBATIM. It contains NO stress/accent marks. Preserve punctuation because it is intentional prosody guidance. Do not paraphrase, shorten, expand, or add spoken words:\n“${stripStress(speech)}”\n\nDELIVERY / EMOTION:\n${delivery}\nSpeak like a real expert talking to one person: warm, confident, conversational and expressive, never robotic or announcer-like. Respect commas and dashes as natural micro-pauses; questions must sound like real questions; short sentences should land as emphasis. Vary emphasis and cadence naturally. Do not rush. NEVER add ellipses or long dramatic pauses.\n\nVISUAL CONCEPT FOR GRID ${v.branch}:\n${concept}\n\nDIRECTING:\n${directing}\nUse consistent editorial framing: start with a clear medium-close or close shot of the presenter, professional soft side or front-side light, slightly defocused premium realistic background. On the hook, use a short burst of directly relevant B-roll when useful. Then alternate close framing on key statements with medium framing on explanations. B-roll must appear only when it supports the exact sentence being spoken. Return clearly to the presenter for the conclusion and CTA. Keep the feeling cinematic, warm, realistic and like a privileged look inside real business.\n\nSuggested B-roll/visual assets:\n${broll.map(x=>'- '+x).join('\\n')}\n\nVISUAL QUALITY:\n\n- premium business editorial aesthetic;\n- highest practical rendering quality, clean modern cinematic lighting, realistic materials and skin;\n- purposeful visual changes and relevant B-roll only when they support the spoken fact;\n- no random stock footage, cheesy transitions, clutter, fake TV-news graphics, low-quality AI artifacts or unnecessary scene spam;\n- avatar remains the recognisable presenter and appears clearly at the start and end;\n- natural facial motion and restrained confident gestures;\n- never sacrifice visual quality to make generation faster.\n\nAUDIO MIX:\n\n- narration is always the dominant element;\n- subtle professional background music only;\n- strong but smooth ducking under narration;\n- no mastering effect that changes the voice identity.\n\nON-SCREEN TEXT:\nHook “${stripStress(limitWhole(v.hook_overlay,26))}” may appear briefly; all other overlay text must be very short (2–4 whole words) and factual.\nNEVER split, hyphenate, wrap or break a word in the middle. Line breaks are allowed only between complete words. If text does not fit, shorten the phrase, reduce font size or reflow the composition.\n\nCRITICAL CROSS-PLATFORM SAFE ZONE FOR TIKTOK / INSTAGRAM REELS / YOUTUBE SHORTS / VK CLIPS:\n\n- Russian captions are REQUIRED for the full narration.\n- Captions must use only clean Russian text with no stress/accent marks.\n- Captions must stay in the CENTRAL safe rectangle, approximately 10–82% of frame width and 40–62% of frame height.\n- NEVER place captions in the bottom 30% of the frame.\n- NEVER place critical text in the rightmost 18% of the frame.\n- Do not put key text in the top 12%.\n- Maximum 2 lines, usually 2–5 whole words per caption block, large high-contrast mobile-readable type.\n- NEVER split a word between caption lines.\n- Captions have layout priority: move/reframe the avatar or visuals so captions never cover the face.\n- Keep all important titles and graphics away from app UI zones at the top/bottom/right edges.\n\nDo not create a logo intro. Start immediately on the hook. Keep pacing natural and human.`;\n}\n\nconst sortedVariants=base.variants.sort((a,b)=>a.branch-b.branch);\n\n// Use the same prompt-detail level for all three videos.\nlet batchPromptMode=0;\nfor(const v of sortedVariants){\n  const speech=stripStress(String(v.spoken_script||v.tts_script||'').trim());\n  if(buildPrompt(v,speech,0).length>MAX_PROMPT_CHARS){ batchPromptMode=1; break; }\n}\nif(batchPromptMode===1){\n  for(const v of sortedVariants){\n    const speech=stripStress(String(v.spoken_script||v.tts_script||'').trim());\n    if(buildPrompt(v,speech,1).length>MAX_PROMPT_CHARS){ batchPromptMode=2; break; }\n  }\n}\n\nreturn sortedVariants.map((v,i)=>{\n  const style_id=primaryStyleId;\n  const speech=stripStress(String(v.spoken_script||v.tts_script||'').trim());\n\n  // Check the credit limit immediately before building the HeyGen request.\n  // A workflow run may create at most ONE HeyGen session for this branch.\n  const speechWords=countWords(speech);\n  if(speechWords>44){\n    throw new Error(`CREDIT_GUARD PRE-HEYGEN MAX30: сетка ${v.branch}, ${speechWords} слов вместе с CTA. Максимум 44. POST заблокирован.`);\n  }\n\n  // Визуальная версия текста БЕЗ знаков ударения.\n  const visible_script=stripStress(String(v.spoken_script||v.tts_script||'').trim());\n  v.spoken_script=visible_script;\n  v.hook_overlay=stripStress(v.hook_overlay||'');\n\n  let mode=batchPromptMode;\n  let prompt=buildPrompt(v,speech,mode);\n\n  // Резервная ветка нужна только при изменении данных между предварительной проверкой и сборкой запроса.\n  if(prompt.length>MAX_PROMPT_CHARS){\n    mode=Math.max(1,mode);\n    prompt=buildPrompt(v,speech,mode);\n  }\n  if(prompt.length>MAX_PROMPT_CHARS){\n    mode=2;\n    prompt=buildPrompt(v,speech,mode);\n  }\n\n  // Keep the selected primary style.\n  // Если даже после сокращения динамических режиссёрских полей prompt не влезает,\n  // останавливаемся ДО HeyGen: сам exact script не режем, style instructions не ухудшаем.\n  if(prompt.length>MAX_PROMPT_CHARS){\n    throw new Error(\n      `HeyGen prompt превышает безопасный лимит: ${prompt.length} символов. ` +\n      `Exact script: ${speech.length}. Речь и инструкции по стилю сохранены.`\n    );\n  }\n\n  // Final check: no stress or accent character may leave this node.\n  prompt=stripStress(prompt);\n\n  let body={\n    prompt,\n    mode:'generate',\n    avatar_id:avatars[i],\n    voice_id:VOICE,\n    orientation:'portrait',\n    incognito_mode:false\n  };\n  if(style_id) body.style_id=style_id;\n  if(BRAND_KIT_ID) body.brand_kit_id=BRAND_KIT_ID;\n  body=deepStripStress(body);\n\n  const serialized=JSON.stringify(body).normalize('NFD');\n  if(/[\\u0300\\u0301\\u0340\\u0341]/.test(serialized)){\n    throw new Error(`STRICT NO-STRESS gate: accent character обнаружен в HeyGen request body, сетка ${v.branch}`);\n  }\n\n  return {\n    json:{\n      ...base,\n      ...v,\n      avatar_id:avatars[i],\n      voice_id:VOICE,\n      style_id,\n      brand_kit_id:BRAND_KIT_ID,\n      heygen_prompt:stripStress(prompt),\n      heygen_prompt_chars:prompt.length,\n      heygen_prompt_mode:mode,\n      visible_script_no_stress:visible_script,\n      visible_hook_no_stress:stripStress(v.hook_overlay||''),\n      heygen_request_body:body,\n      render_attempt:1\n    }\n  };\n});"
+      },
+      "id": "5dd3e5f7-935e-511b-ab85-b7597c0e6ade",
+      "name": "Prepare 3 HeyGen Video Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -92192,
+        21792
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.cleanup_command }}"
+      },
+      "id": "7473140d-4152-5ba8-a802-295555789ac4",
+      "name": "Cleanup Temporary Video Files",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -85920,
+        21952
+      ]
+    },
+    {
+      "parameters": {
+        "platform": "youtube",
+        "accountId": {
+          "__rl": true,
+          "value": "YOUR_PLATFORM_ACCOUNT_ID",
+          "mode": "id",
+          "cachedResultName": "YOUR_PLATFORM_ACCOUNT_ID"
+        },
+        "postContentText": "={{ $json.youtube_desc }}\n\n{{ $json.youtube_hashtags || $json.hashtags }}",
+        "postContentMediaUrls": "={{ $json.blotato_public_url }}",
+        "postCreateYouTubeOptionTitle": "={{ $json.youtube_title }}",
+        "options": {}
+      },
+      "id": "c412e1eb-ee1a-5712-9795-fc7c7f271db0",
+      "name": "YouTube: Publish — Set 1",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -88384,
+        20512
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "amount": 4,
+        "unit": "minutes"
+      },
+      "id": "9315df02-47cd-584c-9a07-51700c172378",
+      "name": "YouTube: Wait for Publish — Set 1",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -88160,
+        20512
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "postSubmissionId": "={{ $json.postSubmissionId }}"
+      },
+      "id": "283ef294-af95-5139-bad1-1634aaefbff0",
+      "name": "YouTube: Get Publication URL — Set 1",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -87936,
+        20512
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { branch: 1, platform: 'youtube', result: $json } };"
+      },
+      "id": "c9f5e755-b755-55a6-8a98-15339d630c9f",
+      "name": "YouTube: Publication Result — Set 1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -87712,
+        20512
+      ]
+    },
+    {
+      "parameters": {
+        "accountId": {
+          "__rl": true,
+          "value": "YOUR_PLATFORM_ACCOUNT_ID",
+          "mode": "id",
+          "cachedResultName": "YOUR_PLATFORM_ACCOUNT_ID"
+        },
+        "postContentText": "={{ $json.instagram_text }}\n\n{{ $json.instagram_hashtags }}",
+        "postContentMediaUrls": "={{ $json.blotato_public_url }}",
+        "options": {}
+      },
+      "id": "ff3c1e31-3dfc-5baa-b6cd-234b614946f3",
+      "name": "Instagram: Publish — Set 1",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -88384,
+        20704
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "amount": 4,
+        "unit": "minutes"
+      },
+      "id": "180371ad-8058-57c5-8947-9c251796d20d",
+      "name": "Instagram: Wait for Publish — Set 1",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -88160,
+        20704
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "postSubmissionId": "={{ $json.postSubmissionId }}"
+      },
+      "id": "51d4d55e-f8b6-5c4b-8a45-e2cbcb30cae1",
+      "name": "Instagram: Get Publication URL — Set 1",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -87936,
+        20704
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { branch: 1, platform: 'instagram', result: $json } };"
+      },
+      "id": "51217a4a-b524-5355-ad5f-2f488b0fdd9b",
+      "name": "Instagram: Publication Result — Set 1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -87712,
+        20704
+      ]
+    },
+    {
+      "parameters": {
+        "platform": "tiktok",
+        "accountId": {
+          "__rl": true,
+          "value": "YOUR_PLATFORM_ACCOUNT_ID",
+          "mode": "id",
+          "cachedResultName": "YOUR_PLATFORM_ACCOUNT_ID"
+        },
+        "postContentText": "={{ $json.tiktok_text }}\n\n{{ $json.tiktok_hashtags }}",
+        "postContentMediaUrls": "={{ $json.blotato_public_url }}",
+        "options": {}
+      },
+      "id": "bfc20ee6-9633-57c3-90d6-2b09e5c261ed",
+      "name": "TikTok: Publish — Set 1",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -88384,
+        20896
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "amount": 4,
+        "unit": "minutes"
+      },
+      "id": "2611746b-3875-578d-a74a-ee3988ca98f6",
+      "name": "TikTok: Wait for Publish — Set 1",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -88160,
+        20896
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "postSubmissionId": "={{ $json.postSubmissionId }}"
+      },
+      "id": "ce4b095c-db8b-5a90-a839-70f72074b223",
+      "name": "TikTok: Get Publication URL — Set 1",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -87936,
+        20896
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { branch: 1, platform: 'tiktok', result: $json } };"
+      },
+      "id": "94d7f98e-6afc-5048-b429-e1b6edd98e1c",
+      "name": "TikTok: Publication Result — Set 1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -87712,
+        20896
+      ]
+    },
+    {
+      "parameters": {
+        "platform": "threads",
+        "accountId": {
+          "__rl": true,
+          "value": "YOUR_PLATFORM_ACCOUNT_ID",
+          "mode": "id",
+          "cachedResultName": "YOUR_PLATFORM_ACCOUNT_ID"
+        },
+        "postContentText": "={{ $json.threads_text }}\n\n{{ $json.threads_hashtags }}",
+        "postContentMediaUrls": "={{ $json.blotato_public_url }}",
+        "options": {}
+      },
+      "id": "9f1d5d52-9fc9-5087-8dfa-8982208a746b",
+      "name": "Threads: Publish — Set 1",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -88384,
+        21088
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "amount": 4,
+        "unit": "minutes"
+      },
+      "id": "4a873db6-2038-5f0a-81e0-d49e6e905949",
+      "name": "Threads: Wait for Publish — Set 1",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -88160,
+        21088
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "postSubmissionId": "={{ $json.postSubmissionId }}"
+      },
+      "id": "e798228e-5b0c-5928-a5f7-a041e6b9b20c",
+      "name": "Threads: Get Publication URL — Set 1",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -87936,
+        21088
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { branch: 1, platform: 'threads', result: $json } };"
+      },
+      "id": "99353735-76fe-5090-ae19-8476c3228f16",
+      "name": "Threads: Publication Result — Set 1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -87712,
+        21088
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 5
+      },
+      "id": "a1f297aa-03fe-5281-901d-209d6af65124",
+      "name": "Merge Platform Results — Set 1",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -87488,
+        20832
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows=$input.all().map(i=>i.json);return {json:{branch:1,publication_results:rows}};"
+      },
+      "id": "c4914dd4-9c97-50dd-9143-08b16065db27",
+      "name": "Collect Platform Links — Set 1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -87264,
+        20880
+      ]
+    },
+    {
+      "parameters": {
+        "platform": "youtube",
+        "accountId": {
+          "__rl": true,
+          "value": "YOUR_PLATFORM_ACCOUNT_ID",
+          "mode": "id",
+          "cachedResultName": "YOUR_PLATFORM_ACCOUNT_ID"
+        },
+        "postContentText": "={{ $json.youtube_desc }}\n\n{{ $json.youtube_hashtags || $json.hashtags }}",
+        "postContentMediaUrls": "={{ $json.blotato_public_url }}",
+        "postCreateYouTubeOptionTitle": "={{ $json.youtube_title }}",
+        "options": {}
+      },
+      "id": "bde5973b-c6e1-570f-8720-930ca4fe6815",
+      "name": "YouTube: Publish — Set 2",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -88384,
+        21616
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "amount": 4,
+        "unit": "minutes"
+      },
+      "id": "69c7d87f-44f2-58d8-bbab-62986e979017",
+      "name": "YouTube: Wait for Publish — Set 2",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -88160,
+        21616
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "postSubmissionId": "={{ $json.postSubmissionId }}"
+      },
+      "id": "63ce0ac5-4f79-584c-a0a0-c8f01c78828e",
+      "name": "YouTube: Get Publication URL — Set 2",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -87936,
+        21616
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { branch: 2, platform: 'youtube', result: $json } };"
+      },
+      "id": "07b1f8e2-ab58-5966-80a8-d034eedf5ba2",
+      "name": "YouTube: Publication Result — Set 2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -87712,
+        21616
+      ]
+    },
+    {
+      "parameters": {
+        "accountId": {
+          "__rl": true,
+          "value": "YOUR_PLATFORM_ACCOUNT_ID",
+          "mode": "id",
+          "cachedResultName": "YOUR_PLATFORM_ACCOUNT_ID"
+        },
+        "postContentText": "={{ $json.instagram_text }}\n\n{{ $json.instagram_hashtags }}",
+        "postContentMediaUrls": "={{ $json.blotato_public_url }}",
+        "options": {}
+      },
+      "id": "7c299dfd-ba60-54d7-91e7-c0a5179d4bb6",
+      "name": "Instagram: Publish — Set 2",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -88384,
+        21808
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "amount": 4,
+        "unit": "minutes"
+      },
+      "id": "18640f00-7d15-50d4-9a48-2c709c146c99",
+      "name": "Instagram: Wait for Publish — Set 2",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -88160,
+        21808
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "postSubmissionId": "={{ $json.postSubmissionId }}"
+      },
+      "id": "27213885-5f40-58c5-94f0-7f3ef8893826",
+      "name": "Instagram: Get Publication URL — Set 2",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -87936,
+        21808
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { branch: 2, platform: 'instagram', result: $json } };"
+      },
+      "id": "41db32ab-3998-551b-814c-f97eccd4c733",
+      "name": "Instagram: Publication Result — Set 2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -87712,
+        21808
+      ]
+    },
+    {
+      "parameters": {
+        "platform": "tiktok",
+        "accountId": {
+          "__rl": true,
+          "value": "YOUR_PLATFORM_ACCOUNT_ID",
+          "mode": "id",
+          "cachedResultName": "YOUR_PLATFORM_ACCOUNT_ID"
+        },
+        "postContentText": "={{ $json.tiktok_text }}\n\n{{ $json.tiktok_hashtags }}",
+        "postContentMediaUrls": "={{ $json.blotato_public_url }}",
+        "options": {}
+      },
+      "id": "4d0455b9-4a0a-53c3-b1e5-6d3c1b30b2f2",
+      "name": "TikTok: Publish — Set 2",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -88384,
+        22224
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "amount": 4,
+        "unit": "minutes"
+      },
+      "id": "45db2472-eb5f-516b-a70f-918e948402f3",
+      "name": "TikTok: Wait for Publish — Set 2",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -88160,
+        22224
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "postSubmissionId": "={{ $json.postSubmissionId }}"
+      },
+      "id": "0e078a65-4241-56f9-8896-97958d9424d7",
+      "name": "TikTok: Get Publication URL — Set 2",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -87936,
+        22224
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { branch: 2, platform: 'tiktok', result: $json } };"
+      },
+      "id": "54d2974b-c254-5694-8f18-3f95006e91da",
+      "name": "TikTok: Publication Result — Set 2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -87712,
+        22224
+      ]
+    },
+    {
+      "parameters": {
+        "platform": "threads",
+        "accountId": {
+          "__rl": true,
+          "value": "YOUR_PLATFORM_ACCOUNT_ID",
+          "mode": "id",
+          "cachedResultName": "YOUR_PLATFORM_ACCOUNT_ID"
+        },
+        "postContentText": "={{ $json.threads_text }}\n\n{{ $json.threads_hashtags }}",
+        "postContentMediaUrls": "={{ $json.blotato_public_url }}",
+        "options": {}
+      },
+      "id": "943874fa-8951-5a75-9489-18772bb49881",
+      "name": "Threads: Publish — Set 2",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -88384,
+        22416
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "amount": 4,
+        "unit": "minutes"
+      },
+      "id": "73ad043d-1872-5021-aea8-d67b0140de49",
+      "name": "Threads: Wait for Publish — Set 2",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -88160,
+        22416
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "postSubmissionId": "={{ $json.postSubmissionId }}"
+      },
+      "id": "d9b91ddb-3274-588e-9acb-7ace0d975632",
+      "name": "Threads: Get Publication URL — Set 2",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -87936,
+        22416
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { branch: 2, platform: 'threads', result: $json } };"
+      },
+      "id": "a19be28d-aeaf-51c0-ad82-c1660bcd4a29",
+      "name": "Threads: Publication Result — Set 2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -87712,
+        22416
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "id": "d2eae63d-cd69-5158-a8dd-f5c3aa7fedaf",
+      "name": "Merge Platform Results — Set 2",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -87488,
+        22000
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows=$input.all().map(i=>i.json);return {json:{branch:2,publication_results:rows}};"
+      },
+      "id": "8d8f35d3-5b9b-59d9-8067-78e375595914",
+      "name": "Collect Platform Links — Set 2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -87264,
+        22032
+      ]
+    },
+    {
+      "parameters": {
+        "platform": "youtube",
+        "accountId": {
+          "__rl": true,
+          "value": "YOUR_PLATFORM_ACCOUNT_ID",
+          "mode": "id",
+          "cachedResultName": "YOUR_PLATFORM_ACCOUNT_ID"
+        },
+        "postContentText": "={{ $json.youtube_desc }}\n\n{{ $json.youtube_hashtags || $json.hashtags }}",
+        "postContentMediaUrls": "={{ $json.blotato_public_url }}",
+        "postCreateYouTubeOptionTitle": "={{ $json.youtube_title }}",
+        "options": {}
+      },
+      "id": "9ba178ea-57c7-5772-9c0a-64c1e9d1fe5a",
+      "name": "YouTube: Publish — Set 3",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -88384,
+        22608
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "amount": 4,
+        "unit": "minutes"
+      },
+      "id": "a9bdab4a-60e2-52f9-9acc-604a351bbd98",
+      "name": "YouTube: Wait for Publish — Set 3",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -88160,
+        22608
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "postSubmissionId": "={{ $json.postSubmissionId }}"
+      },
+      "id": "a2bb8ccc-a984-55b1-a5d5-2ce50835c6f8",
+      "name": "YouTube: Get Publication URL — Set 3",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -87936,
+        22608
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { branch: 3, platform: 'youtube', result: $json } };"
+      },
+      "id": "ec854bc8-6b67-5bd6-b185-939eb8d660e8",
+      "name": "YouTube: Publication Result — Set 3",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -87712,
+        22608
+      ]
+    },
+    {
+      "parameters": {
+        "accountId": {
+          "__rl": true,
+          "value": "YOUR_PLATFORM_ACCOUNT_ID",
+          "mode": "id",
+          "cachedResultName": "YOUR_PLATFORM_ACCOUNT_ID"
+        },
+        "postContentText": "={{ $json.instagram_text }}\n\n{{ $json.instagram_hashtags }}",
+        "postContentMediaUrls": "={{ $json.blotato_public_url }}",
+        "options": {}
+      },
+      "id": "b94d9f1c-2882-5db8-835a-fb70b1af059b",
+      "name": "Instagram: Publish — Set 3",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -88384,
+        22800
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "amount": 4,
+        "unit": "minutes"
+      },
+      "id": "648382f9-535e-58ff-81e9-2b5fc8f74f88",
+      "name": "Instagram: Wait for Publish — Set 3",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -88160,
+        22800
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "postSubmissionId": "={{ $json.postSubmissionId }}"
+      },
+      "id": "63a29bc9-a3c0-51f1-b70c-eaa051bd67b0",
+      "name": "Instagram: Get Publication URL — Set 3",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -87936,
+        22800
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { branch: 3, platform: 'instagram', result: $json } };"
+      },
+      "id": "e180ba00-fd7c-5b2c-a575-34bdc0270370",
+      "name": "Instagram: Publication Result — Set 3",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -87712,
+        22800
+      ]
+    },
+    {
+      "parameters": {
+        "platform": "tiktok",
+        "accountId": {
+          "__rl": true,
+          "value": "YOUR_PLATFORM_ACCOUNT_ID",
+          "mode": "id",
+          "cachedResultName": "YOUR_PLATFORM_ACCOUNT_ID"
+        },
+        "postContentText": "={{ $json.tiktok_text }}\n\n{{ $json.tiktok_hashtags }}",
+        "postContentMediaUrls": "={{ $json.blotato_public_url }}",
+        "options": {}
+      },
+      "id": "58334dcc-5239-5cfd-aefb-8ea9ae8b5aa5",
+      "name": "TikTok: Publish — Set 3",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -88384,
+        23088
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "amount": 4,
+        "unit": "minutes"
+      },
+      "id": "e7c736d9-2cc4-540c-b6bb-9404841fb893",
+      "name": "TikTok: Wait for Publish — Set 3",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -88160,
+        23088
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "postSubmissionId": "={{ $json.postSubmissionId }}"
+      },
+      "id": "882e3221-50fc-5a00-bbe8-11b0634738ce",
+      "name": "TikTok: Get Publication URL — Set 3",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -87936,
+        23088
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { branch: 3, platform: 'tiktok', result: $json } };"
+      },
+      "id": "510d0bd1-3312-501d-81f3-a3d90abb2194",
+      "name": "TikTok: Publication Result — Set 3",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -87712,
+        23088
+      ]
+    },
+    {
+      "parameters": {
+        "platform": "threads",
+        "accountId": {
+          "__rl": true,
+          "value": "YOUR_PLATFORM_ACCOUNT_ID",
+          "mode": "id",
+          "cachedResultName": "YOUR_PLATFORM_ACCOUNT_ID"
+        },
+        "postContentText": "={{ $json.threads_text }}\n\n{{ $json.threads_hashtags }}",
+        "postContentMediaUrls": "={{ $json.blotato_public_url }}",
+        "options": {}
+      },
+      "id": "dd2e6c77-7e0f-52c0-b904-2192745779af",
+      "name": "Threads: Publish — Set 3",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -88384,
+        23280
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "amount": 4,
+        "unit": "minutes"
+      },
+      "id": "6a3befa7-1eff-5d7f-9b70-7bad2f6c7a8a",
+      "name": "Threads: Wait for Publish — Set 3",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -88160,
+        23280
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "postSubmissionId": "={{ $json.postSubmissionId }}"
+      },
+      "id": "4411905f-d158-551c-be6b-b7bc536670e0",
+      "name": "Threads: Get Publication URL — Set 3",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -87936,
+        23280
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "return { json: { branch: 3, platform: 'threads', result: $json } };"
+      },
+      "id": "7dd430a3-3e20-5206-8566-ab100000001",
+      "name": "Threads: Publication Result — Set 3",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -87712,
+        23280
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "id": "aa78d6e4-fc57-5037-a43c-666734327500",
+      "name": "Merge Platform Results — Set 3",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -87488,
+        22768
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows=$input.all().map(i=>i.json);return {json:{branch:3,publication_results:rows}};"
+      },
+      "id": "ade4f833-ef8f-57d0-a37e-7e233f6276fa",
+      "name": "Collect Platform Links — Set 3",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -87264,
+        22800
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "id": "e8572d9f-93c2-5cf4-b5ab-42abee5ec295",
+      "name": "Merge 3 Content Sets",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -87040,
+        21936
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const groups=$input.all().map(i=>i.json).sort((a,b)=>a.branch-b.branch);\nconst base=$('Merge Processing Job Context').item.json;\nfunction getUrl(x){const r=x?.result||{};return String(x?.publicUrl||r.publicUrl||r.url||r.mediaUrl||r.data?.publicUrl||r.data?.url||r.data?.mediaUrl||r.result?.publicUrl||r.result?.url||'').trim();}\nconst labels={youtube:'YouTube',instagram:'Instagram',tiktok:'TikTok',threads:'Threads',vk:'VK'};\nconst flat=[];let text='';\nfor(const g of groups){\n  text+=(text?'\\n\\n':'')+`Сетка ${g.branch}`;\n  const order=g.branch===1?['youtube','instagram','tiktok','threads','vk']:['youtube','instagram','tiktok','threads'];\n  for(const p of order){\n    const row=(g.publication_results||[]).find(x=>x.platform===p);\n    const url=getUrl(row);\n    flat.push({branch:g.branch,platform:p,url,result:row?.result||{}});\n    text+=`\\n${labels[p]}: ${url||'ссылка пока не найдена'}`;\n  }\n}\nreturn {json:{...base,status:'published',publication_results:flat,telegram_text:text,updated_at:new Date().toISOString()}};"
+      },
+      "id": "17798f01-e092-5289-a142-11dac0f13447",
+      "name": "Collect 13 Final Publication Links",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -86816,
+        21952
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "video_jobs",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "post_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.post_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "published"
+            },
+            {
+              "fieldId": "publication_results",
+              "fieldValue": "={{ $json.publication_results }}"
+            },
+            {
+              "fieldId": "updated_at",
+              "fieldValue": "={{ new Date().toISOString() }}"
+            }
+          ]
+        }
+      },
+      "id": "d5820e0d-90d5-5642-97ee-66378478c6fd",
+      "name": "Database: Mark 3 Sets Published",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -86592,
+        21952
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "return {json:$('Collect 13 Final Publication Links').item.json};"
+      },
+      "id": "8de1af5c-1d58-58a4-ad21-42c8a3e47987",
+      "name": "Merge Final Publication State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -86368,
+        21952
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ids=['100000001','100000001','100000001','100000001'];const b=$json;return ids.map(id=>({json:{...b,admin_chat_id:id}}));"
+      },
+      "id": "19f4bad7-2974-5f90-957b-73d6c7a3cbe2",
+      "name": "Prepare Telegram Link Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -85472,
+        21952
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.admin_chat_id }}",
+        "text": "={{ $json.telegram_text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "6329e047-721b-5d56-841f-3ab0d675bdf8",
+      "name": "Send 3-Set Link Summary to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -85248,
+        21952
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const base=$('HeyGen 1: Finalize Video').item.json;\nfunction clean(v){return String(v??'').replace(/[\\u0000-\\u001F\\u007F]/g,' ').replace(/\\s+/g,' ').trim();}\nfunction clip(v,max){const s=clean(v);if(s.length<=max)return s;const parts=s.split(/(?<=[.!?…])\\s+/u).filter(Boolean);let out='';for(const p of parts){const n=out?out+' '+p:p;if(n.length>max)break;out=n;}return (out||s.slice(0,max).replace(/\\s+\\S*$/u,'')).trim();}\nfunction tags(v,max=3){const arr=String(v||'').match(/#[\\p{L}\\p{N}_]+/gu)||String(v||'').split(/[\\s,;]+/);const out=[],seen=new Set();for(let x of arr){x=String(x||'').trim().replace(/^#+/,'').replace(/[^\\p{L}\\p{N}_]/gu,'');if(!x||/^новости$/iu.test(x))continue;const t='#'+x,k=t.toLowerCase();if(seen.has(k))continue;seen.add(k);out.push(t);if(out.length>=max)break;}return out.join(' ');}\nconst title=clip(base.youtube_title||base.hook_overlay||base.title||'Business Media Project',70);\nconst description=clip(base.instagram_text||base.youtube_desc||base.tiktok_text||base.spoken_script||'Коротко о важном для предпринимателей.',160);\nconst hashtags=tags(base.instagram_hashtags||base.youtube_hashtags||base.tiktok_hashtags||'#бизнес #businessmedia #предприниматель',3);\nconst vkText=[description,hashtags].filter(Boolean).join('\\n\\n');\nreturn {json:{...base,vk_video_title:title,vk_video_text:vkText,vk_group_id:'100000001',vk_owner_id:'-100000001'},binary:$binary};"
+      },
+      "id": "41bbca26-7363-5b6f-b4f3-2af6baf00cdc",
+      "name": "VK: Prepare Video from Set 1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -89056,
+        21376
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ String($json.branch) }}",
+              "value2": "1"
+            }
+          ]
+        }
+      },
+      "id": "86084e8a-b40e-59d9-bd08-9fe74728bc3f",
+      "name": "VK: Is This Set 1?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -88832,
+        21376
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.vk.com/method/video.save",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "group_id",
+              "value": "YOUR_VK_OWNER_ID"
+            },
+            {
+              "name": "name",
+              "value": "={{ $json.vk_video_title }}"
+            },
+            {
+              "name": "description",
+              "value": "={{ $json.vk_video_text }}"
+            },
+            {
+              "name": "wallpost",
+              "value": "0"
+            },
+            {
+              "name": "access_token",
+              "value": "={{ $vars.VK_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "v",
+              "value": "5.199"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2b9d0208-8e43-5b89-b896-bb8f96a7c550",
+      "name": "VK: Get Video Upload URL — Set 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -88608,
+        21280
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "return {json:$json,binary:$binary};"
+      },
+      "id": "d4277c3a-1102-5d52-8d81-dacca5f1fde3",
+      "name": "VK: Store Video Binary — Set 1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -88608,
+        21472
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "100a27d1-5b4d-5919-902d-9bcbeefbf52c",
+      "name": "VK: Merge MP4 and Upload URL — Set 1",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -88384,
+        21376
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.response.upload_url }}",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "video_file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "46fbcb16-9cf1-506a-8ff7-9b38b5447ebf",
+      "name": "VK: Upload Video — Set 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -88160,
+        21376
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vk.com/method/wall.post",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "owner_id",
+              "value": "YOUR_VK_OWNER_ID"
+            },
+            {
+              "name": "from_group",
+              "value": "1"
+            },
+            {
+              "name": "message",
+              "value": "={{ $('VK: Prepare Video from Set 1').item.json.vk_video_text }}"
+            },
+            {
+              "name": "attachments",
+              "value": "={{ 'video' + ($json.owner_id || $json.response?.owner_id) + '_' + ($json.video_id || $json.response?.video_id) }}"
+            },
+            {
+              "name": "access_token",
+              "value": "={{ $vars.VK_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "v",
+              "value": "5.199"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "24d8d026-a17f-5bba-b9de-f6d65b2d1087",
+      "name": "VK: Publish Video — Set 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -87936,
+        21376
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const res=$json.response||{};const postId=res.post_id||$json.post_id||'';const url=postId?`https://example.com/wall-100000001_${postId}`:'';return {json:{branch:1,platform:'vk',result:{...$json,publicUrl:url},publicUrl:url}};"
+      },
+      "id": "3c48c02f-2ed9-5537-9fa3-fa489f2ef23e",
+      "name": "VK: Publication Result — Set 1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -87712,
+        21376
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const sources=[\n  'FFmpeg 1: Prepare Compression',\n  'FFmpeg 2: Prepare Compression',\n  'FFmpeg 3: Prepare Compression'\n];\nconst paths=[];\nfor(const name of sources){\n  try {\n    for(const i of $(name).all()){\n      const p=String(i.json.final_file_path||'').trim();\n      if(p.startsWith('/files/')) paths.push(p);\n    }\n  } catch(e) {}\n}\nconst unique=[...new Set(paths)];\nconst quoted=unique.map(p=>'\"'+p.replace(/\"/g,'')+'\"').join(' ');\nconst cleanup_command=quoted\n  ? `rm -f ${quoted} && echo \"CLEANED_FILES=${unique.length}\"`\n  : 'echo \"NO_TEMP_FILES\"';\nreturn {json:{...$json,ffmpeg_temp_files:unique,cleanup_command}};"
+      },
+      "id": "29615a22-c104-5b3c-b963-dbbcc81785ba",
+      "name": "Build Final Cleanup Command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -86144,
+        21952
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return {json:$('Build Final Cleanup Command').item.json};"
+      },
+      "id": "dfbc71b4-951c-523b-999d-09d028f757cf",
+      "name": "Return Data after Cleanup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -85696,
+        21952
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ Number($json.branch) }}",
+              "operation": "equal",
+              "value2": 1
+            }
+          ]
+        }
+      },
+      "id": "1163a78d-7958-5de1-87b7-d13e194552af",
+      "name": "Route to HeyGen 1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -91968,
+        21088
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ Number($json.branch) }}",
+              "operation": "equal",
+              "value2": 2
+            }
+          ]
+        }
+      },
+      "id": "7af8b29c-08d6-5789-b416-2875128a0f97",
+      "name": "Route to HeyGen 2",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -91744,
+        22032
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ Number($json.branch) }}",
+              "operation": "equal",
+              "value2": 3
+            }
+          ]
+        }
+      },
+      "id": "9dc9f387-ad99-56f8-8df1-65831ed4aa26",
+      "name": "Route to HeyGen 3",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -91744,
+        22800
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.heygen.com/v3/video-agents",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "heyGenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.heygen_request_body) }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "e5c3a140-24cf-5d0e-aa8a-b7112b924a20",
+      "name": "HeyGen 1: Create Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -91744,
+        21088
+      ],
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const base=$('Prepare 3 HeyGen Video Requests').item.json;const r=$json.data||$json;const vid=r.video_id||r.id;const sid=r.session_id||'';if(!vid)throw new Error('HeyGen v3 не вернул video_id: '+JSON.stringify($json).slice(0,700));return {json:{...base,heygen_video_id:vid,heygen_session_id:sid,heygen_created:r,render_attempt:Number(base.render_attempt||1)}};"
+      },
+      "id": "3f52532a-19ce-50c7-9131-b2e02d97df03",
+      "name": "HeyGen 1: Store Video ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -91520,
+        21088
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 90
+      },
+      "id": "b2c7bbc7-0064-5b48-9ced-40a3bfefcd5a",
+      "name": "HeyGen 1: Wait 90 Seconds",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -91296,
+        21088
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ 'https://api.heygen.com/v3/videos/' + $json.heygen_video_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "heyGenApi",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "001b7812-1562-5b4d-97c0-d78fb16b6b06",
+      "name": "HeyGen 1: Check Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -91072,
+        21024
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const st=$json.data||$json;\nconst id=String(st.id||st.video_id||'');\nconst originals=$('HeyGen 1: Store Video ID').all().map(i=>i.json);\nlet base=originals.find(x=>String(x.heygen_video_id)===id);\nbase=base||$('HeyGen 1: Store Video ID').item.json;\nconst status=String(st.status||'').toLowerCase();\nconst rawVideo=String(st.video_url||st.url||'');\nconst captioned=String(st.captioned_video_url||'');\nconst subtitle=String(st.subtitle_url||'');\n// Субтитры полностью оставляем HeyGen.\n// Если HeyGen вернул отдельную captioned-версию — используем её.\n// Реальные знаки ударения в request body запрещены upstream hard-gate,\n// поэтому captioned asset получает чистый текст без U+0301.\nconst downloadVideo=captioned||rawVideo;\nif(status==='completed' && !downloadVideo){\n  throw new Error('HeyGen completed, но ни captioned_video_url, ни video_url не получены.');\n}\nreturn {json:{\n  ...base,\n  heygen_status:status,\n  video_url:downloadVideo,\n  raw_video_url:rawVideo,\n  captioned_video_url:captioned,\n  subtitle_url:subtitle,\n  heygen_has_subtitle_url:Boolean(subtitle),\n  heygen_has_captioned_video:Boolean(captioned),\n  video_page_url:st.video_page_url||'',\n  duration:Number(st.duration||0),\n  failure_code:st.failure_code||'',\n  failure_message:st.failure_message||st.error||'',\n  heygen_status_raw:st\n}};"
+      },
+      "id": "11276ad9-82f1-51bb-8d7a-e44fdce74995",
+      "name": "HeyGen 1: Parse Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -90848,
+        21024
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.heygen_status }}",
+              "value2": "completed"
+            }
+          ]
+        }
+      },
+      "id": "1bd46bbd-48b3-577a-8c48-2e8cd77368ee",
+      "name": "HeyGen 1: Is Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -90624,
+        21024
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.heygen_status }}",
+              "value2": "failed"
+            }
+          ]
+        }
+      },
+      "id": "84d86176-ffec-5db1-be03-39c9d2557969",
+      "name": "HeyGen 1: Has Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -90400,
+        21568
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "throw new Error(`HEYGEN_FAILED_NO_RETRY: сетка 1. Автоматическая повторная генерация отключена для защиты кредитов. Текущий HeyGen render завершился failed; новый POST НЕ выполняется.`);"
+      },
+      "id": "ed2d7b65-9a2f-5e10-859b-99b242cf2c36",
+      "name": "HeyGen 1: Stop on Failed Render",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -90176,
+        21792
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return {json:{...$json,ready_to_publish:true}};"
+      },
+      "id": "e4fcba2d-62d6-5563-bfcc-6910b6f6cff3",
+      "name": "HeyGen 1: Finalize Video",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -90400,
+        20976
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const BASE_SPEED=1.2;\nconst TARGET_MAX_SECONDS=29.6; // запас перед жёстким лимитом 30.0\nconst HARD_MAX_SECONDS=35.0;\nconst rawPost=String($json.post_id||'post').replace(/[^a-zA-Z0-9_-]+/g,'_').slice(0,80);\nconst branch=Number($json.branch||0)||1;\nconst stamp=Date.now();\nconst raw=`/files/heygen_${rawPost}_b${branch}_${stamp}_captioned_raw.mp4`;\nconst final=`/files/heygen_${rawPost}_b${branch}_${stamp}_target30_hard35_blotato.mp4`;\nconst retry=`/files/heygen_${rawPost}_b${branch}_${stamp}_retry.mp4`;\nconst passlog=`/files/heygen_${rawPost}_b${branch}_${stamp}_2pass`;\n\n// Blotato binary upload limit is 15 MB. Keep a real safety margin.\nconst TARGET_BYTES=13200000;\nconst HARD_MAX_BYTES=14500000;\nconst AUDIO_K=128;\n\nfunction sh(v){ return `'${String(v).replace(/'/g, `'\"'\"'`)}'`; }\n\nconst cmd=[\n  `ffmpeg -version >/dev/null 2>&1 || { echo \"FFMPEG_NOT_FOUND\"; exit 127; }`,\n  `ffprobe -version >/dev/null 2>&1 || { echo \"FFPROBE_NOT_FOUND\"; exit 127; }`,\n  `test -s ${sh(raw)} || { echo \"RAW_FILE_NOT_FOUND=${raw}\"; exit 1; }`,\n\n  // Read real HeyGen duration and choose speed. Never slower than 1.2x.\n  // If 1.2x would still exceed 29.6s, increase only as much as necessary.\n  `duration=$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 ${sh(raw)}); ` +\n  `test -n \"$duration\" || { echo \"DURATION_NOT_FOUND\"; exit 1; }; ` +\n  `speed=$(awk -v d=\"$duration\" -v base=\"${BASE_SPEED}\" -v target=\"${TARGET_MAX_SECONDS}\" 'BEGIN{need=d/target; s=(need>base?need:base); printf \"%.5f\", s}'); ` +\n  `awk -v s=\"$speed\" 'BEGIN{if(s>2.0) exit 0; exit 1}' && { echo \"VIDEO_TOO_LONG_FOR_SAFE_ATEMPO_SPEED=$speed\"; exit 6; } || true; ` +\n  `outdur=$(awk -v d=\"$duration\" -v s=\"$speed\" 'BEGIN{printf \"%.3f\", d/s}'); ` +\n  `total_k=$(awk -v bytes=\"${TARGET_BYTES}\" -v d=\"$outdur\" 'BEGIN{printf \"%d\", (bytes*8*0.94)/(d*1000)}'); ` +\n  `video_k=$((total_k-${AUDIO_K}-40)); if [ \"$video_k\" -lt 450 ]; then video_k=450; fi; ` +\n  `echo \"INPUT_DURATION=$duration\"; echo \"VIDEO_SPEED=$speed\"; echo \"EXPECTED_OUTPUT_DURATION=$outdur\"; echo \"TARGET_VIDEO_KBPS=$video_k\"`,\n\n  // Adaptive resolution protects quality when the bitrate budget gets small.\n  `if [ \"$video_k\" -ge 1900 ]; then out_w=1080; out_h=1920; ` +\n  `elif [ \"$video_k\" -ge 850 ]; then out_w=720; out_h=1280; ` +\n  `else out_w=540; out_h=960; fi; echo \"OUTPUT_SIZE=\\${out_w}x\\${out_h}\"`,\n\n  // Two-pass H.264. HeyGen captions are already burned into frames.\n  `vf=\"scale=$out_w:$out_h:force_original_aspect_ratio=decrease,pad=$out_w:$out_h:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS/$speed\"; ` +\n  `ffmpeg -hide_banner -loglevel error -y -i ${sh(raw)} -vf \"$vf\" -an ` +\n  `-c:v libx264 -preset medium -b:v \"\\${video_k}k\" -maxrate \"\\${video_k}k\" -bufsize \"$((video_k*2))k\" ` +\n  `-pass 1 -passlogfile ${sh(passlog)} -f mp4 /dev/null && ` +\n  `ffmpeg -hide_banner -loglevel error -y -i ${sh(raw)} ` +\n  `-filter_complex \"[0:v]$vf[v];[0:a]aresample=48000,atempo=$speed[a]\" ` +\n  `-map \"[v]\" -map \"[a]\" -map_metadata -1 ` +\n  `-c:v libx264 -preset medium -b:v \"\\${video_k}k\" -maxrate \"\\${video_k}k\" -bufsize \"$((video_k*2))k\" ` +\n  `-pass 2 -passlogfile ${sh(passlog)} -pix_fmt yuv420p ` +\n  `-c:a aac -b:a ${AUDIO_K}k -ar 48000 -movflags +faststart ${sh(final)}`,\n\n  `rm -f ${sh(passlog)}-0.log ${sh(passlog)}-0.log.mbtree ${sh(passlog)}.log ${sh(passlog)}.log.mbtree`,\n  `test -s ${sh(final)} || { echo \"FINAL_FILE_NOT_CREATED=${final}\"; exit 1; }`,\n\n  // Emergency size pass if muxing variance still lands over 14.5 MB.\n  `size_bytes=$(wc -c < ${sh(final)}); if [ \"$size_bytes\" -gt \"${HARD_MAX_BYTES}\" ]; then ` +\n  `echo \"EMERGENCY_REENCODE_ORIGINAL_SIZE=$size_bytes\"; ` +\n  `retry_k=$((video_k*75/100)); if [ \"$retry_k\" -lt 350 ]; then retry_k=350; fi; ` +\n  `ffmpeg -hide_banner -loglevel error -y -i ${sh(raw)} ` +\n  `-filter_complex \"[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS/$speed[v];[0:a]aresample=48000,atempo=$speed[a]\" ` +\n  `-map \"[v]\" -map \"[a]\" -map_metadata -1 -c:v libx264 -preset medium ` +\n  `-b:v \"\\${retry_k}k\" -maxrate \"\\${retry_k}k\" -bufsize \"$((retry_k*2))k\" -pix_fmt yuv420p ` +\n  `-c:a aac -b:a 96k -ar 48000 -movflags +faststart ${sh(retry)} && mv ${sh(retry)} ${sh(final)}; fi`,\n\n  `final_size=$(wc -c < ${sh(final)}); ` +\n  `if [ \"$final_size\" -gt \"${HARD_MAX_BYTES}\" ]; then echo \"BLOTATO_FILE_STILL_TOO_LARGE=$final_size\"; exit 4; fi`,\n\n  // ABSOLUTE DURATION GATE. No file >30.0s can reach Blotato/VK.\n  `final_duration=$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 ${sh(final)}); ` +\n  `test -n \"$final_duration\" || { echo \"FINAL_DURATION_NOT_FOUND\"; exit 1; }; ` +\n  `if awk -v d=\"$final_duration\" -v max=\"${HARD_MAX_SECONDS}\" 'BEGIN{exit !(d>max)}'; then ` +\n  `echo \"DURATION_GUARD_FAILED=$final_duration\"; rm -f ${sh(final)}; exit 5; fi; ` +\n  `echo \"FINAL_DURATION=$final_duration\"`,\n\n  `rm -f ${sh(raw)} ${sh(retry)}`,\n  `echo \"HEYGEN_CAPTIONS_PRESERVED=true\"`,\n  `echo \"BLOTATO_BINARY_SAFE=true\"`,\n  `echo \"MAX_DURATION_SECONDS=${HARD_MAX_SECONDS}\"`,\n  `echo \"FINAL_FILE=${final}\"`,\n  `echo \"FINAL_SIZE_BYTES=$final_size\"`\n].join('\\n');\n\nreturn {json:{\n  ...$json,\n  base_video_speed:BASE_SPEED,\n  target_max_seconds:TARGET_MAX_SECONDS,\n  hard_max_seconds:HARD_MAX_SECONDS,\n  raw_file_path:raw,\n  final_file_path:final,\n  target_bytes:TARGET_BYTES,\n  hard_max_bytes:HARD_MAX_BYTES,\n  captions_source:'heygen',\n  ffmpeg_command:cmd\n}};"
+      },
+      "id": "c1bbd929-ccab-589d-88c3-e362fa367115",
+      "name": "FFmpeg 1: Prepare Compression",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -90176,
+        20976
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.video_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "60b0b661-05cd-5e56-be21-bb55dd57b7fe",
+      "name": "HeyGen 1: Download Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -89952,
+        20976
+      ],
+      "retryOnFail": true,
+      "maxTries": 10,
+      "waitBetweenTries": 30000
+    },
+    {
+      "parameters": {
+        "fileName": "={{ $('FFmpeg 1: Prepare Compression').item.json.raw_file_path }}",
+        "options": {}
+      },
+      "id": "ab812cd1-92b4-5098-9b53-f4717e2b945d",
+      "name": "FFmpeg 1: Write Temporary File",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        -89728,
+        20976
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "command": "={{ $('FFmpeg 1: Prepare Compression').item.json.ffmpeg_command }}"
+      },
+      "id": "cfb5e14b-b93b-518d-b8d8-0a731acffb79",
+      "name": "FFmpeg 1: Process Video",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -89504,
+        20976
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "filePath": "={{ $('FFmpeg 1: Prepare Compression').item.json.final_file_path }}"
+      },
+      "id": "85900ead-c32c-5043-870b-7f9a78b3f923",
+      "name": "FFmpeg 1: Read Processed Video",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        -89280,
+        20976
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "resource": "media",
+        "useBinaryData": true
+      },
+      "id": "026dd81d-e5db-5d84-9c0b-32f68ccd5250",
+      "name": "Blotato 1: Upload Media",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -88832,
+        20800
+      ],
+      "retryOnFail": true,
+      "maxTries": 10,
+      "waitBetweenTries": 30000
+    },
+    {
+      "parameters": {
+        "jsCode": "const base=$('HeyGen 1: Finalize Video').item.json;const r=$json||{};const url=r.url||r.mediaUrl||r.publicUrl||r.data?.url||r.data?.mediaUrl||r.data?.publicUrl||'';if(!url)throw new Error('Blotato media upload не вернул URL: '+JSON.stringify(r).slice(0,700));return {json:{...base,blotato_public_url:url,blotato_upload_raw:r}};"
+      },
+      "id": "cd3d02ad-ea16-56c3-acd8-aecc9fbeb149",
+      "name": "Blotato 1: Merge Media URL and Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -88608,
+        20800
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.heygen.com/v3/video-agents",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "heyGenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.heygen_request_body) }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "9681089b-4944-598a-b44e-202c06afa5dc",
+      "name": "HeyGen 2: Create Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -91520,
+        22032
+      ],
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const base=$('Prepare 3 HeyGen Video Requests').item.json;const r=$json.data||$json;const vid=r.video_id||r.id;const sid=r.session_id||'';if(!vid)throw new Error('HeyGen v3 не вернул video_id: '+JSON.stringify($json).slice(0,700));return {json:{...base,heygen_video_id:vid,heygen_session_id:sid,heygen_created:r,render_attempt:Number(base.render_attempt||1)}};"
+      },
+      "id": "7c28ebb1-b745-5e88-94d2-2dd28d3ace50",
+      "name": "HeyGen 2: Store Video ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -91296,
+        22032
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 90
+      },
+      "id": "76192b66-a58e-5906-b168-99bd2f45e22f",
+      "name": "HeyGen 2: Wait 90 Seconds",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -91072,
+        22032
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ 'https://api.heygen.com/v3/videos/' + $json.heygen_video_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "heyGenApi",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "31be5c90-bc9b-5743-b8fc-0d447bfb563a",
+      "name": "HeyGen 2: Check Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -90848,
+        22000
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const st=$json.data||$json;\nconst id=String(st.id||st.video_id||'');\nconst originals=$('HeyGen 2: Store Video ID').all().map(i=>i.json);\nlet base=originals.find(x=>String(x.heygen_video_id)===id);\nbase=base||$('HeyGen 2: Store Video ID').item.json;\nconst status=String(st.status||'').toLowerCase();\nconst rawVideo=String(st.video_url||st.url||'');\nconst captioned=String(st.captioned_video_url||'');\nconst subtitle=String(st.subtitle_url||'');\n// Субтитры полностью оставляем HeyGen.\n// Если HeyGen вернул отдельную captioned-версию — используем её.\n// Реальные знаки ударения в request body запрещены upstream hard-gate,\n// поэтому captioned asset получает чистый текст без U+0301.\nconst downloadVideo=captioned||rawVideo;\nif(status==='completed' && !downloadVideo){\n  throw new Error('HeyGen completed, но ни captioned_video_url, ни video_url не получены.');\n}\nreturn {json:{\n  ...base,\n  heygen_status:status,\n  video_url:downloadVideo,\n  raw_video_url:rawVideo,\n  captioned_video_url:captioned,\n  subtitle_url:subtitle,\n  heygen_has_subtitle_url:Boolean(subtitle),\n  heygen_has_captioned_video:Boolean(captioned),\n  video_page_url:st.video_page_url||'',\n  duration:Number(st.duration||0),\n  failure_code:st.failure_code||'',\n  failure_message:st.failure_message||st.error||'',\n  heygen_status_raw:st\n}};"
+      },
+      "id": "b190a284-fea7-5fe9-8871-3c46d876aabe",
+      "name": "HeyGen 2: Parse Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -90624,
+        22000
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.heygen_status }}",
+              "value2": "completed"
+            }
+          ]
+        }
+      },
+      "id": "6b9d2e4b-0959-55a6-a237-62dec8daae88",
+      "name": "HeyGen 2: Is Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -90400,
+        22000
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.heygen_status }}",
+              "value2": "failed"
+            }
+          ]
+        }
+      },
+      "id": "8da02728-6da9-54b5-9a5a-a370ea952875",
+      "name": "HeyGen 2: Has Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -90176,
+        22432
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "throw new Error(`HEYGEN_FAILED_NO_RETRY: сетка 2. Автоматическая повторная генерация отключена для защиты кредитов. Текущий HeyGen render завершился failed; новый POST НЕ выполняется.`);"
+      },
+      "id": "f0b89b81-c91e-5b03-b6d4-83140232f337",
+      "name": "HeyGen 2: Stop on Failed Render",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -89952,
+        22560
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return {json:{...$json,ready_to_publish:true}};"
+      },
+      "id": "aec51053-39fb-58a2-a7bb-649dd6195f53",
+      "name": "HeyGen 2: Finalize Video",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -90176,
+        22032
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const BASE_SPEED=1.2;\nconst TARGET_MAX_SECONDS=29.6; // запас перед жёстким лимитом 30.0\nconst HARD_MAX_SECONDS=35.0;\nconst rawPost=String($json.post_id||'post').replace(/[^a-zA-Z0-9_-]+/g,'_').slice(0,80);\nconst branch=Number($json.branch||0)||1;\nconst stamp=Date.now();\nconst raw=`/files/heygen_${rawPost}_b${branch}_${stamp}_captioned_raw.mp4`;\nconst final=`/files/heygen_${rawPost}_b${branch}_${stamp}_target30_hard35_blotato.mp4`;\nconst retry=`/files/heygen_${rawPost}_b${branch}_${stamp}_retry.mp4`;\nconst passlog=`/files/heygen_${rawPost}_b${branch}_${stamp}_2pass`;\n\n// Blotato binary upload limit is 15 MB. Keep a real safety margin.\nconst TARGET_BYTES=13200000;\nconst HARD_MAX_BYTES=14500000;\nconst AUDIO_K=128;\n\nfunction sh(v){ return `'${String(v).replace(/'/g, `'\"'\"'`)}'`; }\n\nconst cmd=[\n  `ffmpeg -version >/dev/null 2>&1 || { echo \"FFMPEG_NOT_FOUND\"; exit 127; }`,\n  `ffprobe -version >/dev/null 2>&1 || { echo \"FFPROBE_NOT_FOUND\"; exit 127; }`,\n  `test -s ${sh(raw)} || { echo \"RAW_FILE_NOT_FOUND=${raw}\"; exit 1; }`,\n\n  // Read real HeyGen duration and choose speed. Never slower than 1.2x.\n  // If 1.2x would still exceed 29.6s, increase only as much as necessary.\n  `duration=$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 ${sh(raw)}); ` +\n  `test -n \"$duration\" || { echo \"DURATION_NOT_FOUND\"; exit 1; }; ` +\n  `speed=$(awk -v d=\"$duration\" -v base=\"${BASE_SPEED}\" -v target=\"${TARGET_MAX_SECONDS}\" 'BEGIN{need=d/target; s=(need>base?need:base); printf \"%.5f\", s}'); ` +\n  `awk -v s=\"$speed\" 'BEGIN{if(s>2.0) exit 0; exit 1}' && { echo \"VIDEO_TOO_LONG_FOR_SAFE_ATEMPO_SPEED=$speed\"; exit 6; } || true; ` +\n  `outdur=$(awk -v d=\"$duration\" -v s=\"$speed\" 'BEGIN{printf \"%.3f\", d/s}'); ` +\n  `total_k=$(awk -v bytes=\"${TARGET_BYTES}\" -v d=\"$outdur\" 'BEGIN{printf \"%d\", (bytes*8*0.94)/(d*1000)}'); ` +\n  `video_k=$((total_k-${AUDIO_K}-40)); if [ \"$video_k\" -lt 450 ]; then video_k=450; fi; ` +\n  `echo \"INPUT_DURATION=$duration\"; echo \"VIDEO_SPEED=$speed\"; echo \"EXPECTED_OUTPUT_DURATION=$outdur\"; echo \"TARGET_VIDEO_KBPS=$video_k\"`,\n\n  // Adaptive resolution protects quality when the bitrate budget gets small.\n  `if [ \"$video_k\" -ge 1900 ]; then out_w=1080; out_h=1920; ` +\n  `elif [ \"$video_k\" -ge 850 ]; then out_w=720; out_h=1280; ` +\n  `else out_w=540; out_h=960; fi; echo \"OUTPUT_SIZE=\\${out_w}x\\${out_h}\"`,\n\n  // Two-pass H.264. HeyGen captions are already burned into frames.\n  `vf=\"scale=$out_w:$out_h:force_original_aspect_ratio=decrease,pad=$out_w:$out_h:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS/$speed\"; ` +\n  `ffmpeg -hide_banner -loglevel error -y -i ${sh(raw)} -vf \"$vf\" -an ` +\n  `-c:v libx264 -preset medium -b:v \"\\${video_k}k\" -maxrate \"\\${video_k}k\" -bufsize \"$((video_k*2))k\" ` +\n  `-pass 1 -passlogfile ${sh(passlog)} -f mp4 /dev/null && ` +\n  `ffmpeg -hide_banner -loglevel error -y -i ${sh(raw)} ` +\n  `-filter_complex \"[0:v]$vf[v];[0:a]aresample=48000,atempo=$speed[a]\" ` +\n  `-map \"[v]\" -map \"[a]\" -map_metadata -1 ` +\n  `-c:v libx264 -preset medium -b:v \"\\${video_k}k\" -maxrate \"\\${video_k}k\" -bufsize \"$((video_k*2))k\" ` +\n  `-pass 2 -passlogfile ${sh(passlog)} -pix_fmt yuv420p ` +\n  `-c:a aac -b:a ${AUDIO_K}k -ar 48000 -movflags +faststart ${sh(final)}`,\n\n  `rm -f ${sh(passlog)}-0.log ${sh(passlog)}-0.log.mbtree ${sh(passlog)}.log ${sh(passlog)}.log.mbtree`,\n  `test -s ${sh(final)} || { echo \"FINAL_FILE_NOT_CREATED=${final}\"; exit 1; }`,\n\n  // Emergency size pass if muxing variance still lands over 14.5 MB.\n  `size_bytes=$(wc -c < ${sh(final)}); if [ \"$size_bytes\" -gt \"${HARD_MAX_BYTES}\" ]; then ` +\n  `echo \"EMERGENCY_REENCODE_ORIGINAL_SIZE=$size_bytes\"; ` +\n  `retry_k=$((video_k*75/100)); if [ \"$retry_k\" -lt 350 ]; then retry_k=350; fi; ` +\n  `ffmpeg -hide_banner -loglevel error -y -i ${sh(raw)} ` +\n  `-filter_complex \"[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS/$speed[v];[0:a]aresample=48000,atempo=$speed[a]\" ` +\n  `-map \"[v]\" -map \"[a]\" -map_metadata -1 -c:v libx264 -preset medium ` +\n  `-b:v \"\\${retry_k}k\" -maxrate \"\\${retry_k}k\" -bufsize \"$((retry_k*2))k\" -pix_fmt yuv420p ` +\n  `-c:a aac -b:a 96k -ar 48000 -movflags +faststart ${sh(retry)} && mv ${sh(retry)} ${sh(final)}; fi`,\n\n  `final_size=$(wc -c < ${sh(final)}); ` +\n  `if [ \"$final_size\" -gt \"${HARD_MAX_BYTES}\" ]; then echo \"BLOTATO_FILE_STILL_TOO_LARGE=$final_size\"; exit 4; fi`,\n\n  // ABSOLUTE DURATION GATE. No file >30.0s can reach Blotato/VK.\n  `final_duration=$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 ${sh(final)}); ` +\n  `test -n \"$final_duration\" || { echo \"FINAL_DURATION_NOT_FOUND\"; exit 1; }; ` +\n  `if awk -v d=\"$final_duration\" -v max=\"${HARD_MAX_SECONDS}\" 'BEGIN{exit !(d>max)}'; then ` +\n  `echo \"DURATION_GUARD_FAILED=$final_duration\"; rm -f ${sh(final)}; exit 5; fi; ` +\n  `echo \"FINAL_DURATION=$final_duration\"`,\n\n  `rm -f ${sh(raw)} ${sh(retry)}`,\n  `echo \"HEYGEN_CAPTIONS_PRESERVED=true\"`,\n  `echo \"BLOTATO_BINARY_SAFE=true\"`,\n  `echo \"MAX_DURATION_SECONDS=${HARD_MAX_SECONDS}\"`,\n  `echo \"FINAL_FILE=${final}\"`,\n  `echo \"FINAL_SIZE_BYTES=$final_size\"`\n].join('\\n');\n\nreturn {json:{\n  ...$json,\n  base_video_speed:BASE_SPEED,\n  target_max_seconds:TARGET_MAX_SECONDS,\n  hard_max_seconds:HARD_MAX_SECONDS,\n  raw_file_path:raw,\n  final_file_path:final,\n  target_bytes:TARGET_BYTES,\n  hard_max_bytes:HARD_MAX_BYTES,\n  captions_source:'heygen',\n  ffmpeg_command:cmd\n}};"
+      },
+      "id": "2fccd536-70b4-566e-826d-27f46269cc16",
+      "name": "FFmpeg 2: Prepare Compression",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -89952,
+        22032
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.video_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "a6c361bf-4b78-5e3f-b188-99df8b399df3",
+      "name": "HeyGen 2: Download Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -89728,
+        22032
+      ],
+      "retryOnFail": true,
+      "maxTries": 10,
+      "waitBetweenTries": 30000
+    },
+    {
+      "parameters": {
+        "fileName": "={{ $('FFmpeg 2: Prepare Compression').item.json.raw_file_path }}",
+        "options": {}
+      },
+      "id": "fd175804-9c74-594d-8e64-1ce0be588b29",
+      "name": "FFmpeg 2: Write Temporary File",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        -89504,
+        22032
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "command": "={{ $('FFmpeg 2: Prepare Compression').item.json.ffmpeg_command }}"
+      },
+      "id": "b944f09b-e839-558b-94b9-7eefa675c9b5",
+      "name": "FFmpeg 2: Process Video",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -89280,
+        22032
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "filePath": "={{ $('FFmpeg 2: Prepare Compression').item.json.final_file_path }}"
+      },
+      "id": "ed213f45-1cd6-5dfe-9422-e14b289976dd",
+      "name": "FFmpeg 2: Read Processed Video",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        -89056,
+        22032
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "resource": "media",
+        "useBinaryData": true
+      },
+      "id": "6afbc159-754b-5e85-90e7-51216102a957",
+      "name": "Blotato 2: Upload Media",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -88832,
+        22032
+      ],
+      "retryOnFail": true,
+      "maxTries": 10,
+      "waitBetweenTries": 30000
+    },
+    {
+      "parameters": {
+        "jsCode": "const base=$('HeyGen 2: Finalize Video').item.json;const r=$json||{};const url=r.url||r.mediaUrl||r.publicUrl||r.data?.url||r.data?.mediaUrl||r.data?.publicUrl||'';if(!url)throw new Error('Blotato media upload не вернул URL: '+JSON.stringify(r).slice(0,700));return {json:{...base,blotato_public_url:url,blotato_upload_raw:r}};"
+      },
+      "id": "f987d33c-94d3-57d5-88e4-6ffc37e5164b",
+      "name": "Blotato 2: Merge Media URL and Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -88608,
+        22032
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.heygen.com/v3/video-agents",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "heyGenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.heygen_request_body) }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "7ca99c60-796f-569c-bbb6-0bb73832bfd7",
+      "name": "HeyGen 3: Create Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -91520,
+        22800
+      ],
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const base=$('Prepare 3 HeyGen Video Requests').item.json;const r=$json.data||$json;const vid=r.video_id||r.id;const sid=r.session_id||'';if(!vid)throw new Error('HeyGen v3 не вернул video_id: '+JSON.stringify($json).slice(0,700));return {json:{...base,heygen_video_id:vid,heygen_session_id:sid,heygen_created:r,render_attempt:Number(base.render_attempt||1)}};"
+      },
+      "id": "28017288-2c91-53c4-a375-d555779a352d",
+      "name": "HeyGen 3: Store Video ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -91296,
+        22800
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 90
+      },
+      "id": "f8738798-5e10-5baa-a610-b3d1271d036a",
+      "name": "HeyGen 3: Wait 90 Seconds",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -91072,
+        22800
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ 'https://api.heygen.com/v3/videos/' + $json.heygen_video_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "heyGenApi",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "55e233a7-f639-5848-bb55-23af41ba93b9",
+      "name": "HeyGen 3: Check Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -90848,
+        22768
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const st=$json.data||$json;\nconst id=String(st.id||st.video_id||'');\nconst originals=$('HeyGen 3: Store Video ID').all().map(i=>i.json);\nlet base=originals.find(x=>String(x.heygen_video_id)===id);\nbase=base||$('HeyGen 3: Store Video ID').item.json;\nconst status=String(st.status||'').toLowerCase();\nconst rawVideo=String(st.video_url||st.url||'');\nconst captioned=String(st.captioned_video_url||'');\nconst subtitle=String(st.subtitle_url||'');\n// Субтитры полностью оставляем HeyGen.\n// Если HeyGen вернул отдельную captioned-версию — используем её.\n// Реальные знаки ударения в request body запрещены upstream hard-gate,\n// поэтому captioned asset получает чистый текст без U+0301.\nconst downloadVideo=captioned||rawVideo;\nif(status==='completed' && !downloadVideo){\n  throw new Error('HeyGen completed, но ни captioned_video_url, ни video_url не получены.');\n}\nreturn {json:{\n  ...base,\n  heygen_status:status,\n  video_url:downloadVideo,\n  raw_video_url:rawVideo,\n  captioned_video_url:captioned,\n  subtitle_url:subtitle,\n  heygen_has_subtitle_url:Boolean(subtitle),\n  heygen_has_captioned_video:Boolean(captioned),\n  video_page_url:st.video_page_url||'',\n  duration:Number(st.duration||0),\n  failure_code:st.failure_code||'',\n  failure_message:st.failure_message||st.error||'',\n  heygen_status_raw:st\n}};"
+      },
+      "id": "551de257-1a69-50a4-bda7-ac7caf3eab83",
+      "name": "HeyGen 3: Parse Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -90624,
+        22768
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.heygen_status }}",
+              "value2": "completed"
+            }
+          ]
+        }
+      },
+      "id": "5f8c2a27-e45b-5a3d-9d55-1c1a73ab8bed",
+      "name": "HeyGen 3: Is Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -90400,
+        22768
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.heygen_status }}",
+              "value2": "failed"
+            }
+          ]
+        }
+      },
+      "id": "dfb760ac-ee9a-5bf6-83f0-26cf732b5c33",
+      "name": "HeyGen 3: Has Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -90176,
+        22944
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "throw new Error(`HEYGEN_FAILED_NO_RETRY: сетка 3. Автоматическая повторная генерация отключена для защиты кредитов. Текущий HeyGen render завершился failed; новый POST НЕ выполняется.`);"
+      },
+      "id": "4f2741ab-1356-5c41-84cb-be581b6217f1",
+      "name": "HeyGen 3: Stop on Failed Render",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -89952,
+        23184
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return {json:{...$json,ready_to_publish:true}};"
+      },
+      "id": "c4e72e33-87a9-5cb7-bde2-ade530a6700d",
+      "name": "HeyGen 3: Finalize Video",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -90176,
+        22720
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const BASE_SPEED=1.2;\nconst TARGET_MAX_SECONDS=29.6; // запас перед жёстким лимитом 30.0\nconst HARD_MAX_SECONDS=35.0;\nconst rawPost=String($json.post_id||'post').replace(/[^a-zA-Z0-9_-]+/g,'_').slice(0,80);\nconst branch=Number($json.branch||0)||1;\nconst stamp=Date.now();\nconst raw=`/files/heygen_${rawPost}_b${branch}_${stamp}_captioned_raw.mp4`;\nconst final=`/files/heygen_${rawPost}_b${branch}_${stamp}_target30_hard35_blotato.mp4`;\nconst retry=`/files/heygen_${rawPost}_b${branch}_${stamp}_retry.mp4`;\nconst passlog=`/files/heygen_${rawPost}_b${branch}_${stamp}_2pass`;\n\n// Blotato binary upload limit is 15 MB. Keep a real safety margin.\nconst TARGET_BYTES=13200000;\nconst HARD_MAX_BYTES=14500000;\nconst AUDIO_K=128;\n\nfunction sh(v){ return `'${String(v).replace(/'/g, `'\"'\"'`)}'`; }\n\nconst cmd=[\n  `ffmpeg -version >/dev/null 2>&1 || { echo \"FFMPEG_NOT_FOUND\"; exit 127; }`,\n  `ffprobe -version >/dev/null 2>&1 || { echo \"FFPROBE_NOT_FOUND\"; exit 127; }`,\n  `test -s ${sh(raw)} || { echo \"RAW_FILE_NOT_FOUND=${raw}\"; exit 1; }`,\n\n  // Read real HeyGen duration and choose speed. Never slower than 1.2x.\n  // If 1.2x would still exceed 29.6s, increase only as much as necessary.\n  `duration=$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 ${sh(raw)}); ` +\n  `test -n \"$duration\" || { echo \"DURATION_NOT_FOUND\"; exit 1; }; ` +\n  `speed=$(awk -v d=\"$duration\" -v base=\"${BASE_SPEED}\" -v target=\"${TARGET_MAX_SECONDS}\" 'BEGIN{need=d/target; s=(need>base?need:base); printf \"%.5f\", s}'); ` +\n  `awk -v s=\"$speed\" 'BEGIN{if(s>2.0) exit 0; exit 1}' && { echo \"VIDEO_TOO_LONG_FOR_SAFE_ATEMPO_SPEED=$speed\"; exit 6; } || true; ` +\n  `outdur=$(awk -v d=\"$duration\" -v s=\"$speed\" 'BEGIN{printf \"%.3f\", d/s}'); ` +\n  `total_k=$(awk -v bytes=\"${TARGET_BYTES}\" -v d=\"$outdur\" 'BEGIN{printf \"%d\", (bytes*8*0.94)/(d*1000)}'); ` +\n  `video_k=$((total_k-${AUDIO_K}-40)); if [ \"$video_k\" -lt 450 ]; then video_k=450; fi; ` +\n  `echo \"INPUT_DURATION=$duration\"; echo \"VIDEO_SPEED=$speed\"; echo \"EXPECTED_OUTPUT_DURATION=$outdur\"; echo \"TARGET_VIDEO_KBPS=$video_k\"`,\n\n  // Adaptive resolution protects quality when the bitrate budget gets small.\n  `if [ \"$video_k\" -ge 1900 ]; then out_w=1080; out_h=1920; ` +\n  `elif [ \"$video_k\" -ge 850 ]; then out_w=720; out_h=1280; ` +\n  `else out_w=540; out_h=960; fi; echo \"OUTPUT_SIZE=\\${out_w}x\\${out_h}\"`,\n\n  // Two-pass H.264. HeyGen captions are already burned into frames.\n  `vf=\"scale=$out_w:$out_h:force_original_aspect_ratio=decrease,pad=$out_w:$out_h:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS/$speed\"; ` +\n  `ffmpeg -hide_banner -loglevel error -y -i ${sh(raw)} -vf \"$vf\" -an ` +\n  `-c:v libx264 -preset medium -b:v \"\\${video_k}k\" -maxrate \"\\${video_k}k\" -bufsize \"$((video_k*2))k\" ` +\n  `-pass 1 -passlogfile ${sh(passlog)} -f mp4 /dev/null && ` +\n  `ffmpeg -hide_banner -loglevel error -y -i ${sh(raw)} ` +\n  `-filter_complex \"[0:v]$vf[v];[0:a]aresample=48000,atempo=$speed[a]\" ` +\n  `-map \"[v]\" -map \"[a]\" -map_metadata -1 ` +\n  `-c:v libx264 -preset medium -b:v \"\\${video_k}k\" -maxrate \"\\${video_k}k\" -bufsize \"$((video_k*2))k\" ` +\n  `-pass 2 -passlogfile ${sh(passlog)} -pix_fmt yuv420p ` +\n  `-c:a aac -b:a ${AUDIO_K}k -ar 48000 -movflags +faststart ${sh(final)}`,\n\n  `rm -f ${sh(passlog)}-0.log ${sh(passlog)}-0.log.mbtree ${sh(passlog)}.log ${sh(passlog)}.log.mbtree`,\n  `test -s ${sh(final)} || { echo \"FINAL_FILE_NOT_CREATED=${final}\"; exit 1; }`,\n\n  // Emergency size pass if muxing variance still lands over 14.5 MB.\n  `size_bytes=$(wc -c < ${sh(final)}); if [ \"$size_bytes\" -gt \"${HARD_MAX_BYTES}\" ]; then ` +\n  `echo \"EMERGENCY_REENCODE_ORIGINAL_SIZE=$size_bytes\"; ` +\n  `retry_k=$((video_k*75/100)); if [ \"$retry_k\" -lt 350 ]; then retry_k=350; fi; ` +\n  `ffmpeg -hide_banner -loglevel error -y -i ${sh(raw)} ` +\n  `-filter_complex \"[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS/$speed[v];[0:a]aresample=48000,atempo=$speed[a]\" ` +\n  `-map \"[v]\" -map \"[a]\" -map_metadata -1 -c:v libx264 -preset medium ` +\n  `-b:v \"\\${retry_k}k\" -maxrate \"\\${retry_k}k\" -bufsize \"$((retry_k*2))k\" -pix_fmt yuv420p ` +\n  `-c:a aac -b:a 96k -ar 48000 -movflags +faststart ${sh(retry)} && mv ${sh(retry)} ${sh(final)}; fi`,\n\n  `final_size=$(wc -c < ${sh(final)}); ` +\n  `if [ \"$final_size\" -gt \"${HARD_MAX_BYTES}\" ]; then echo \"BLOTATO_FILE_STILL_TOO_LARGE=$final_size\"; exit 4; fi`,\n\n  // ABSOLUTE DURATION GATE. No file >30.0s can reach Blotato/VK.\n  `final_duration=$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 ${sh(final)}); ` +\n  `test -n \"$final_duration\" || { echo \"FINAL_DURATION_NOT_FOUND\"; exit 1; }; ` +\n  `if awk -v d=\"$final_duration\" -v max=\"${HARD_MAX_SECONDS}\" 'BEGIN{exit !(d>max)}'; then ` +\n  `echo \"DURATION_GUARD_FAILED=$final_duration\"; rm -f ${sh(final)}; exit 5; fi; ` +\n  `echo \"FINAL_DURATION=$final_duration\"`,\n\n  `rm -f ${sh(raw)} ${sh(retry)}`,\n  `echo \"HEYGEN_CAPTIONS_PRESERVED=true\"`,\n  `echo \"BLOTATO_BINARY_SAFE=true\"`,\n  `echo \"MAX_DURATION_SECONDS=${HARD_MAX_SECONDS}\"`,\n  `echo \"FINAL_FILE=${final}\"`,\n  `echo \"FINAL_SIZE_BYTES=$final_size\"`\n].join('\\n');\n\nreturn {json:{\n  ...$json,\n  base_video_speed:BASE_SPEED,\n  target_max_seconds:TARGET_MAX_SECONDS,\n  hard_max_seconds:HARD_MAX_SECONDS,\n  raw_file_path:raw,\n  final_file_path:final,\n  target_bytes:TARGET_BYTES,\n  hard_max_bytes:HARD_MAX_BYTES,\n  captions_source:'heygen',\n  ffmpeg_command:cmd\n}};"
+      },
+      "id": "d6821fe4-1f8b-5012-96bc-af6498898729",
+      "name": "FFmpeg 3: Prepare Compression",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -89952,
+        22800
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.video_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "a384537b-1b3d-514e-b22d-355ed87a4a96",
+      "name": "HeyGen 3: Download Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -89728,
+        22800
+      ],
+      "retryOnFail": true,
+      "maxTries": 10,
+      "waitBetweenTries": 30000
+    },
+    {
+      "parameters": {
+        "fileName": "={{ $('FFmpeg 3: Prepare Compression').item.json.raw_file_path }}",
+        "options": {}
+      },
+      "id": "49133b41-9468-55e9-bdfc-d987bdd332ee",
+      "name": "FFmpeg 3: Write Temporary File",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        -89504,
+        22800
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "command": "={{ $('FFmpeg 3: Prepare Compression').item.json.ffmpeg_command }}"
+      },
+      "id": "53948e91-c470-5551-bf23-326b18fd6888",
+      "name": "FFmpeg 3: Process Video",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -89280,
+        22800
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "filePath": "={{ $('FFmpeg 3: Prepare Compression').item.json.final_file_path }}"
+      },
+      "id": "f2be051e-9d90-5502-a243-7387364ea863",
+      "name": "FFmpeg 3: Read Processed Video",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        -89056,
+        22800
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "resource": "media",
+        "useBinaryData": true
+      },
+      "id": "4f468523-d675-5b65-a071-65a71f0983e3",
+      "name": "Blotato 3: Upload Media",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [
+        -88832,
+        22800
+      ],
+      "retryOnFail": true,
+      "maxTries": 10,
+      "waitBetweenTries": 30000
+    },
+    {
+      "parameters": {
+        "jsCode": "const base=$('HeyGen 3: Finalize Video').item.json;const r=$json||{};const url=r.url||r.mediaUrl||r.publicUrl||r.data?.url||r.data?.mediaUrl||r.data?.publicUrl||'';if(!url)throw new Error('Blotato media upload не вернул URL: '+JSON.stringify(r).slice(0,700));return {json:{...base,blotato_public_url:url,blotato_upload_raw:r}};"
+      },
+      "id": "bc7cf609-9f6e-504f-9e5c-610682f3f1cc",
+      "name": "Blotato 3: Merge Media URL and Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -88608,
+        22800
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Test Trigger": {
+      "main": [
+        [
+          {
+            "node": "Test Fixture: Sample Business Topic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Fixture: Sample Business Topic": {
+      "main": [
+        [
+          {
+            "node": "Normalize Webhook Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WordPress Video Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Webhook Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Webhook Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Secret, Status, and Idempotency Key",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Secret, Status, and Idempotency Key": {
+      "main": [
+        [
+          {
+            "node": "Database: Check Existing Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Database: Check Existing Job": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Existing Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Existing Job": {
+      "main": [
+        [
+          {
+            "node": "Continue Generation?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continue Generation?": {
+      "main": [
+        [
+          {
+            "node": "Database: Create Processing Job",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Webhook Response: Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Database: Create Processing Job": {
+      "main": [
+        [
+          {
+            "node": "Merge Processing Job Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Processing Job Context": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response: Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Response: Accepted": {
+      "main": [
+        [
+          {
+            "node": "OpenAI: Generate 3 Scripts and Captions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI: Generate 3 Scripts and Captions": {
+      "main": [
+        [
+          {
+            "node": "Parse and Validate 3 Content Sets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse and Validate 3 Content Sets": {
+      "main": [
+        [
+          {
+            "node": "HeyGen: List Available Styles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen: List Available Styles": {
+      "main": [
+        [
+          {
+            "node": "Build Generic Video Style Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Generic Video Style Configuration": {
+      "main": [
+        [
+          {
+            "node": "Prepare 3 HeyGen Video Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare 3 HeyGen Video Requests": {
+      "main": [
+        [
+          {
+            "node": "Route to HeyGen 1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route to HeyGen 2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route to HeyGen 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cleanup Temporary Video Files": {
+      "main": [
+        [
+          {
+            "node": "Return Data after Cleanup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube: Publish — Set 1": {
+      "main": [
+        [
+          {
+            "node": "YouTube: Wait for Publish — Set 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube: Wait for Publish — Set 1": {
+      "main": [
+        [
+          {
+            "node": "YouTube: Get Publication URL — Set 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube: Get Publication URL — Set 1": {
+      "main": [
+        [
+          {
+            "node": "YouTube: Publication Result — Set 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube: Publication Result — Set 1": {
+      "main": [
+        [
+          {
+            "node": "Merge Platform Results — Set 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: Publish — Set 1": {
+      "main": [
+        [
+          {
+            "node": "Instagram: Wait for Publish — Set 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: Wait for Publish — Set 1": {
+      "main": [
+        [
+          {
+            "node": "Instagram: Get Publication URL — Set 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: Get Publication URL — Set 1": {
+      "main": [
+        [
+          {
+            "node": "Instagram: Publication Result — Set 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: Publication Result — Set 1": {
+      "main": [
+        [
+          {
+            "node": "Merge Platform Results — Set 1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "TikTok: Publish — Set 1": {
+      "main": [
+        [
+          {
+            "node": "TikTok: Wait for Publish — Set 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok: Wait for Publish — Set 1": {
+      "main": [
+        [
+          {
+            "node": "TikTok: Get Publication URL — Set 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok: Get Publication URL — Set 1": {
+      "main": [
+        [
+          {
+            "node": "TikTok: Publication Result — Set 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok: Publication Result — Set 1": {
+      "main": [
+        [
+          {
+            "node": "Merge Platform Results — Set 1",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Threads: Publish — Set 1": {
+      "main": [
+        [
+          {
+            "node": "Threads: Wait for Publish — Set 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Threads: Wait for Publish — Set 1": {
+      "main": [
+        [
+          {
+            "node": "Threads: Get Publication URL — Set 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Threads: Get Publication URL — Set 1": {
+      "main": [
+        [
+          {
+            "node": "Threads: Publication Result — Set 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Threads: Publication Result — Set 1": {
+      "main": [
+        [
+          {
+            "node": "Merge Platform Results — Set 1",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Merge Platform Results — Set 1": {
+      "main": [
+        [
+          {
+            "node": "Collect Platform Links — Set 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Platform Links — Set 1": {
+      "main": [
+        [
+          {
+            "node": "Merge 3 Content Sets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube: Publish — Set 2": {
+      "main": [
+        [
+          {
+            "node": "YouTube: Wait for Publish — Set 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube: Wait for Publish — Set 2": {
+      "main": [
+        [
+          {
+            "node": "YouTube: Get Publication URL — Set 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube: Get Publication URL — Set 2": {
+      "main": [
+        [
+          {
+            "node": "YouTube: Publication Result — Set 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube: Publication Result — Set 2": {
+      "main": [
+        [
+          {
+            "node": "Merge Platform Results — Set 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: Publish — Set 2": {
+      "main": [
+        [
+          {
+            "node": "Instagram: Wait for Publish — Set 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: Wait for Publish — Set 2": {
+      "main": [
+        [
+          {
+            "node": "Instagram: Get Publication URL — Set 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: Get Publication URL — Set 2": {
+      "main": [
+        [
+          {
+            "node": "Instagram: Publication Result — Set 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: Publication Result — Set 2": {
+      "main": [
+        [
+          {
+            "node": "Merge Platform Results — Set 2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "TikTok: Publish — Set 2": {
+      "main": [
+        [
+          {
+            "node": "TikTok: Wait for Publish — Set 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok: Wait for Publish — Set 2": {
+      "main": [
+        [
+          {
+            "node": "TikTok: Get Publication URL — Set 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok: Get Publication URL — Set 2": {
+      "main": [
+        [
+          {
+            "node": "TikTok: Publication Result — Set 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok: Publication Result — Set 2": {
+      "main": [
+        [
+          {
+            "node": "Merge Platform Results — Set 2",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Threads: Publish — Set 2": {
+      "main": [
+        [
+          {
+            "node": "Threads: Wait for Publish — Set 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Threads: Wait for Publish — Set 2": {
+      "main": [
+        [
+          {
+            "node": "Threads: Get Publication URL — Set 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Threads: Get Publication URL — Set 2": {
+      "main": [
+        [
+          {
+            "node": "Threads: Publication Result — Set 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Threads: Publication Result — Set 2": {
+      "main": [
+        [
+          {
+            "node": "Merge Platform Results — Set 2",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Merge Platform Results — Set 2": {
+      "main": [
+        [
+          {
+            "node": "Collect Platform Links — Set 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Platform Links — Set 2": {
+      "main": [
+        [
+          {
+            "node": "Merge 3 Content Sets",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "YouTube: Publish — Set 3": {
+      "main": [
+        [
+          {
+            "node": "YouTube: Wait for Publish — Set 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube: Wait for Publish — Set 3": {
+      "main": [
+        [
+          {
+            "node": "YouTube: Get Publication URL — Set 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube: Get Publication URL — Set 3": {
+      "main": [
+        [
+          {
+            "node": "YouTube: Publication Result — Set 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube: Publication Result — Set 3": {
+      "main": [
+        [
+          {
+            "node": "Merge Platform Results — Set 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: Publish — Set 3": {
+      "main": [
+        [
+          {
+            "node": "Instagram: Wait for Publish — Set 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: Wait for Publish — Set 3": {
+      "main": [
+        [
+          {
+            "node": "Instagram: Get Publication URL — Set 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: Get Publication URL — Set 3": {
+      "main": [
+        [
+          {
+            "node": "Instagram: Publication Result — Set 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: Publication Result — Set 3": {
+      "main": [
+        [
+          {
+            "node": "Merge Platform Results — Set 3",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "TikTok: Publish — Set 3": {
+      "main": [
+        [
+          {
+            "node": "TikTok: Wait for Publish — Set 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok: Wait for Publish — Set 3": {
+      "main": [
+        [
+          {
+            "node": "TikTok: Get Publication URL — Set 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok: Get Publication URL — Set 3": {
+      "main": [
+        [
+          {
+            "node": "TikTok: Publication Result — Set 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok: Publication Result — Set 3": {
+      "main": [
+        [
+          {
+            "node": "Merge Platform Results — Set 3",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Threads: Publish — Set 3": {
+      "main": [
+        [
+          {
+            "node": "Threads: Wait for Publish — Set 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Threads: Wait for Publish — Set 3": {
+      "main": [
+        [
+          {
+            "node": "Threads: Get Publication URL — Set 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Threads: Get Publication URL — Set 3": {
+      "main": [
+        [
+          {
+            "node": "Threads: Publication Result — Set 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Threads: Publication Result — Set 3": {
+      "main": [
+        [
+          {
+            "node": "Merge Platform Results — Set 3",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Merge Platform Results — Set 3": {
+      "main": [
+        [
+          {
+            "node": "Collect Platform Links — Set 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Platform Links — Set 3": {
+      "main": [
+        [
+          {
+            "node": "Merge 3 Content Sets",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge 3 Content Sets": {
+      "main": [
+        [
+          {
+            "node": "Collect 13 Final Publication Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect 13 Final Publication Links": {
+      "main": [
+        [
+          {
+            "node": "Database: Mark 3 Sets Published",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Database: Mark 3 Sets Published": {
+      "main": [
+        [
+          {
+            "node": "Merge Final Publication State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Final Publication State": {
+      "main": [
+        [
+          {
+            "node": "Build Final Cleanup Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Telegram Link Summary": {
+      "main": [
+        [
+          {
+            "node": "Send 3-Set Link Summary to Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VK: Prepare Video from Set 1": {
+      "main": [
+        [
+          {
+            "node": "VK: Is This Set 1?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VK: Is This Set 1?": {
+      "main": [
+        [
+          {
+            "node": "VK: Get Video Upload URL — Set 1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "VK: Store Video Binary — Set 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VK: Get Video Upload URL — Set 1": {
+      "main": [
+        [
+          {
+            "node": "VK: Merge MP4 and Upload URL — Set 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VK: Store Video Binary — Set 1": {
+      "main": [
+        [
+          {
+            "node": "VK: Merge MP4 and Upload URL — Set 1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "VK: Merge MP4 and Upload URL — Set 1": {
+      "main": [
+        [
+          {
+            "node": "VK: Upload Video — Set 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VK: Upload Video — Set 1": {
+      "main": [
+        [
+          {
+            "node": "VK: Publish Video — Set 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VK: Publish Video — Set 1": {
+      "main": [
+        [
+          {
+            "node": "VK: Publication Result — Set 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VK: Publication Result — Set 1": {
+      "main": [
+        [
+          {
+            "node": "Merge Platform Results — Set 1",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "Build Final Cleanup Command": {
+      "main": [
+        [
+          {
+            "node": "Cleanup Temporary Video Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return Data after Cleanup": {
+      "main": [
+        [
+          {
+            "node": "Prepare Telegram Link Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route to HeyGen 1": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 1: Create Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route to HeyGen 2": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 2: Create Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route to HeyGen 3": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 3: Create Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 1: Create Video": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 1: Store Video ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 1: Store Video ID": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 1: Wait 90 Seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 1: Wait 90 Seconds": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 1: Check Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 1: Check Status": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 1: Parse Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 1: Parse Status": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 1: Is Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 1: Is Ready?": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 1: Finalize Video",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HeyGen 1: Has Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 1: Has Failed?": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 1: Stop on Failed Render",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HeyGen 1: Wait 90 Seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 1: Finalize Video": {
+      "main": [
+        [
+          {
+            "node": "FFmpeg 1: Prepare Compression",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FFmpeg 1: Prepare Compression": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 1: Download Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 1: Download Video": {
+      "main": [
+        [
+          {
+            "node": "FFmpeg 1: Write Temporary File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FFmpeg 1: Write Temporary File": {
+      "main": [
+        [
+          {
+            "node": "FFmpeg 1: Process Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FFmpeg 1: Process Video": {
+      "main": [
+        [
+          {
+            "node": "FFmpeg 1: Read Processed Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FFmpeg 1: Read Processed Video": {
+      "main": [
+        [
+          {
+            "node": "VK: Prepare Video from Set 1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Blotato 1: Upload Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Blotato 1: Upload Media": {
+      "main": [
+        [
+          {
+            "node": "Blotato 1: Merge Media URL and Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Blotato 1: Merge Media URL and Metadata": {
+      "main": [
+        [
+          {
+            "node": "YouTube: Publish — Set 1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Instagram: Publish — Set 1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "TikTok: Publish — Set 1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Threads: Publish — Set 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 2: Create Video": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 2: Store Video ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 2: Store Video ID": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 2: Wait 90 Seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 2: Wait 90 Seconds": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 2: Check Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 2: Check Status": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 2: Parse Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 2: Parse Status": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 2: Is Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 2: Is Ready?": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 2: Finalize Video",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HeyGen 2: Has Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 2: Has Failed?": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 2: Stop on Failed Render",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HeyGen 2: Wait 90 Seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 2: Finalize Video": {
+      "main": [
+        [
+          {
+            "node": "FFmpeg 2: Prepare Compression",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FFmpeg 2: Prepare Compression": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 2: Download Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 2: Download Video": {
+      "main": [
+        [
+          {
+            "node": "FFmpeg 2: Write Temporary File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FFmpeg 2: Write Temporary File": {
+      "main": [
+        [
+          {
+            "node": "FFmpeg 2: Process Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FFmpeg 2: Process Video": {
+      "main": [
+        [
+          {
+            "node": "FFmpeg 2: Read Processed Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FFmpeg 2: Read Processed Video": {
+      "main": [
+        [
+          {
+            "node": "Blotato 2: Upload Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Blotato 2: Upload Media": {
+      "main": [
+        [
+          {
+            "node": "Blotato 2: Merge Media URL and Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Blotato 2: Merge Media URL and Metadata": {
+      "main": [
+        [
+          {
+            "node": "YouTube: Publish — Set 2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Instagram: Publish — Set 2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "TikTok: Publish — Set 2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Threads: Publish — Set 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 3: Create Video": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 3: Store Video ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 3: Store Video ID": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 3: Wait 90 Seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 3: Wait 90 Seconds": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 3: Check Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 3: Check Status": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 3: Parse Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 3: Parse Status": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 3: Is Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 3: Is Ready?": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 3: Finalize Video",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HeyGen 3: Has Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 3: Has Failed?": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 3: Stop on Failed Render",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HeyGen 3: Wait 90 Seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 3: Finalize Video": {
+      "main": [
+        [
+          {
+            "node": "FFmpeg 3: Prepare Compression",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FFmpeg 3: Prepare Compression": {
+      "main": [
+        [
+          {
+            "node": "HeyGen 3: Download Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HeyGen 3: Download Video": {
+      "main": [
+        [
+          {
+            "node": "FFmpeg 3: Write Temporary File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FFmpeg 3: Write Temporary File": {
+      "main": [
+        [
+          {
+            "node": "FFmpeg 3: Process Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FFmpeg 3: Process Video": {
+      "main": [
+        [
+          {
+            "node": "FFmpeg 3: Read Processed Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FFmpeg 3: Read Processed Video": {
+      "main": [
+        [
+          {
+            "node": "Blotato 3: Upload Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Blotato 3: Upload Media": {
+      "main": [
+        [
+          {
+            "node": "Blotato 3: Merge Media URL and Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Blotato 3: Merge Media URL and Metadata": {
+      "main": [
+        [
+          {
+            "node": "YouTube: Publish — Set 3",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Instagram: Publish — Set 3",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "TikTok: Publish — Set 3",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Threads: Publish — Set 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

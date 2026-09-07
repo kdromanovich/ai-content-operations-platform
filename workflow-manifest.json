@@ -1,0 +1,52 @@
+{
+  "project": "AI Content Operations Platform",
+  "repository": "https://github.com/kdromanovich/ai-content-operations-platform",
+  "source_n8n_version": "2.17.5",
+  "workflow_count": 7,
+  "functional_node_count": 315,
+  "connection_edge_count": 336,
+  "workflows": [
+    {
+      "file": "workflows/01-telegram-source-ingestion.json",
+      "nodes": 14,
+      "edges": 14,
+      "trigger": "manual"
+    },
+    {
+      "file": "workflows/02-web-source-ingestion.json",
+      "nodes": 20,
+      "edges": 22,
+      "trigger": "schedule-or-manual"
+    },
+    {
+      "file": "workflows/03-ai-topic-curation.json",
+      "nodes": 32,
+      "edges": 35,
+      "trigger": "schedule-subworkflow-or-manual"
+    },
+    {
+      "file": "workflows/04-telegram-editorial-assistant.json",
+      "nodes": 37,
+      "edges": 37,
+      "trigger": "telegram-or-manual"
+    },
+    {
+      "file": "workflows/05-wordpress-publishing-pipeline.json",
+      "nodes": 30,
+      "edges": 29,
+      "trigger": "schedule-or-subworkflow"
+    },
+    {
+      "file": "workflows/06-multichannel-text-distribution.json",
+      "nodes": 43,
+      "edges": 45,
+      "trigger": "webhook-or-manual"
+    },
+    {
+      "file": "workflows/07-ai-video-production-distribution.json",
+      "nodes": 139,
+      "edges": 154,
+      "trigger": "webhook-or-manual"
+    }
+  ]
+}

@@ -1,0 +1,1444 @@
+{
+  "name": "04 | Telegram Editorial Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5.1",
+          "mode": "list",
+          "cachedResultName": "gpt-5.1"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -15504,
+        16192
+      ],
+      "id": "99c7bb57-0856-5140-b031-be10f2e57ae6",
+      "name": "OpenAI Chat Model"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "Напиши пост на основе этой темы",
+        "options": {
+          "systemMessage": "=Ты - опытный копирайтер, который пишет посты для проекта Business Media Project о бизнесе и предпринимательстве.\n\nПРАВИЛО №0: НИКОГДА НЕ ИСПОЛЬЗУЙ ДЛИННЫЕ ТИРЕ ( — )! Только дефис ( - ).\n\n=== ИСХОДНЫЕ ДАННЫЕ ===\n\n1. Исходный текст поста из донора:\n{{ $('Get Source Post').item.json.content }}\n\n2. Посты из БАЗЫ ЗНАНИЙ, стиль автора:\n{{ $json.data.toJsonString() }}\n\n=== ТВОЯ ЗАДАЧА ===\n\n1. Изучи стиль автора из базы знаний.\n2. Возьми ТОЛЬКО тему и факты из исходного поста.\n3. НЕ копируй текст исходного поста.\n4. Напиши новый пост для предпринимателей.\n5. Пост должен быть деловым, экспертным, понятным и с небольшим личным акцентом.\n6. Длина поста: 700-1500 символов.\n\n=== ФОРМАТ ПОСТА ===\n\nСегодня нужно написать пост в формате:\n\nТип поста:\n{{ $json.post_format_name }}\n\nИнструкция по формату:\n{{ $json.post_format_instruction }}\n\nСтруктура:\n{{ $json.post_format_structure }}\n\nКРИТИЧЕСКИ ВАЖНО:\nПиши именно в этом формате. Не делай каждый пост одинаковым.\nЕсли выбран чек-лист - дай прикладные пункты.\nЕсли выбран пост с мнением - добавь авторскую позицию.\nЕсли выбран кейс - подай как ситуацию из практики.\nЕсли выбран обсуждение - закончи вопросом к аудитории.\nЕсли выбран мягкий продающий пост - не продавай агрессивно, только аккуратно свяжи тему с обучением.\nЕсли выбран легкий юмор - юмор должен быть деловым, без сленга и грубости.\n\n=== СТИЛЬ ПРОЕКТА Business Media Project ===\n\nПиши в деловом, экспертном стиле с небольшим личным акцентом.\n\nТон:\n- спокойный\n- уверенный\n- профессиональный\n- понятный предпринимателю\n- без канцелярита\n- без грубого сленга\n- без молодежных и резких выражений\n- без чрезмерной драматизации\n- без ощущения желтой прессы\n\nАвторская позиция должна звучать как опытный предприниматель/эксперт, который объясняет ситуацию спокойно и по делу.\n\nМожно использовать формулировки:\n- \"на практике это часто приводит к...\"\n- \"важно учитывать...\"\n- \"предпринимателю стоит заранее проверить...\"\n- \"по моему опыту...\"\n- \"в таких ситуациях лучше не откладывать...\"\n- \"это может стать риском для бизнеса...\"\n- \"здесь важно действовать аккуратно\"\n\nЗапрещено использовать выражения:\n- вынести мозг\n- все равно предъявят\n- прилетела выплата\n- живой кэш\n- накосячить\n- косяк\n- бабки\n- деньги прилетели\n- влететь\n- жесть\n- треш\n- геморрой\n- мутки\n- кидать\n- развод\n- прикол\n- запарываться\n- налоговая придет и заберет\n- бизнесу конец\n\nЕсли хочется написать резко, замени на деловую формулировку.\n\nПримеры замены:\n- \"накосячить\" → \"допустить ошибку\"\n- \"вынести мозг\" → \"создать серьезную нагрузку\"\n- \"прилетела выплата\" → \"поступили деньги\"\n- \"живой кэш\" → \"свободные деньги\"\n- \"все равно предъявят\" → \"могут возникнуть претензии\"\n- \"влететь на штраф\" → \"получить штраф или доначисления\"\n\n=== СТРУКТУРА ПОСТА ===\n\n1. Хук:\n- 1-2 строки\n- без крика и желтизны\n- можно через факт, риск, наблюдение или вопрос\n- хук должен быть деловым, но цепляющим\n\n2. Основная часть:\n- 3-5 коротких абзацев\n- каждый абзац - одна мысль\n- добавь практический вывод для предпринимателя\n- не уходи в общие рассуждения\n\n3. Концовка:\n- мягкий призыв к реакции или обсуждению\n- без агрессивного \"ставьте лайк\"\n- пример: \"Сталкивались с подобным в бизнесе?\"\n\n=== ФОРМАТИРОВАНИЕ TELEGRAM ===\n\nРазрешены только эти HTML теги:\n- <b>жирный</b>\n- <i>курсив</i>\n- <u>подчёркнутый</u>\n- <s>зачёркнутый</s>\n- <a href=\"URL\">ссылка</a>\n\nЗапрещены любые другие HTML теги:\n<br>, <ul>, <li>, <div>, <p>, <blockquote>, <span> и любые другие.\n\nПереносы строк делай обычным переносом строки, не тегами.\n\nНе используй Markdown:\n- не используй **\n- не используй #\n- не используй ``` \n- не используй списки через markdown\n\n=== ФОРМАТ ОТВЕТА ===\n\nВыведи ТОЛЬКО готовый текст поста.\nБез JSON.\nБез markdown-блока.\nБез пояснений до или после.\nБез заголовков типа \"Вот пост:\".\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        -15472,
+        15984
+      ],
+      "id": "9377dd7a-12f0-5542-b05f-30ce7e180e90",
+      "name": "AI Agent: Generate Editorial Draft"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parse Telegram Callback').item.json.chat_id }}",
+        "text": "=\n<b>✅ Пост сгенерирован!</b>\n\n<b>Тип поста:</b> {{ $('Select Post Format').item.json.post_format_name }}\n\nТекст поста:\n━━━━━━━━━━━━\n\n{{ $json.content }}\n\n━━━━━━━━━━━━\n<b>Для того чтобы отредактировать пост ответьте на это сообщение с новым текстом поста.</b>\n\nЗапланировать публикацию?\n\n<i>Сохранён в черновики (ID: {{ $json.id }})</i>\n",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.reply_markup.inline_keyboard[0][0].text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.reply_markup.inline_keyboard[0][0].callback_data }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.reply_markup.inline_keyboard[1][0].text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.reply_markup.inline_keyboard[1][0].callback_data }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.reply_markup.inline_keyboard[2][0].text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.reply_markup.inline_keyboard[2][0].callback_data }}"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.reply_markup.inline_keyboard[2][1].text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.reply_markup.inline_keyboard[2][1].callback_data }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.reply_markup.inline_keyboard[3][0].text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.reply_markup.inline_keyboard[3][0].callback_data }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -14064,
+        15984
+      ],
+      "id": "57ff19b0-7916-5f17-aa42-be7ef037af82",
+      "name": "Send Result to Telegram",
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Parse Telegram Callback').item.json.chat_id }}_{{ $('Get Source Post').item.json.id }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -15312,
+        16192
+      ],
+      "id": "b5199a02-fe11-5ffe-a941-e4bbc4406c69",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        -15888,
+        15984
+      ],
+      "id": "147ef515-4669-5356-b068-918a15a8b5c2",
+      "name": "Aggregate Writing Examples"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "source_content",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "keyValue": "={{ $json.post_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -16400,
+        15984
+      ],
+      "id": "79072975-e71c-5aee-8f2c-06da5605df2b",
+      "name": "Get Source Post"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "knowledge_base",
+        "limit": 10
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -16160,
+        15984
+      ],
+      "id": "11d7c8a4-24bf-5673-a407-97eaa2d16a4c",
+      "name": "Get Knowledge Base"
+    },
+    {
+      "parameters": {
+        "tableId": "drafts",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "source_content_id",
+              "fieldValue": "={{ $json.post_id }}"
+            },
+            {
+              "fieldId": "content_type",
+              "fieldValue": "post"
+            },
+            {
+              "fieldId": "content",
+              "fieldValue": "={{ $json.content }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -14640,
+        15984
+      ],
+      "id": "10a0f63c-9d3a-54cd-93e6-2a521660d65c",
+      "name": "Save to Drafts"
+    },
+    {
+      "parameters": {
+        "jsCode": "let text = $input.first().json.output;\n\n// Очистка: убираем блоки кода, кавычки и лишние переносы\ntext = text\n  .replace(/```html/g, '') \n  .replace(/```/g, '')\n  .replace(/^\"|\"$/g, '')\n  .replace(/—/g, '-') // Защита от длинных тире\n  .trim();\n\n// Получаем ID новости из ноды Get Source Post\nconst postId = $('Get Source Post').first().json.id;\n\nreturn [{ json: { content: text, post_id: postId } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -14944,
+        15984
+      ],
+      "id": "b216f666-f67e-5521-8969-100000001de",
+      "name": "Convert Draft to Telegram Format"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Parse Telegram Callback').item.json.action }}",
+                    "rightValue": "generate_post",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "5703f608-b3f0-5a47-8fb9-2de9d5f4d839"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "generate_post"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "4bca6291-d2c6-51ed-9871-f503b2fc08f7",
+                    "leftValue": "={{ $('Parse Telegram Callback').item.json.action }}",
+                    "rightValue": "edit_post",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "edit_post"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "9db2b449-a47c-5262-bdf5-7e951d76b7d3",
+                    "leftValue": "={{ $('Parse Telegram Callback').item.json.action }}",
+                    "rightValue": "publish_now",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "publish_now"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "26336fcb-193b-5b18-a695-d45c1d29af83",
+                    "leftValue": "={{ $('Parse Telegram Callback').item.json.action }}",
+                    "rightValue": "schedule_post",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "schedule_post"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "69b6786b-0f88-5594-910a-b761441e217d",
+                    "leftValue": "={{ $('Parse Telegram Callback').item.json.action }}",
+                    "rightValue": "schedule_custom",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "schedule_custom"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "2db66a58-619a-5504-a382-35a1be709352",
+                    "leftValue": "={{ $('Parse Telegram Callback').item.json.action }}",
+                    "rightValue": "search_more",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "search_more"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "0a718dd7-4783-5375-a9c3-fe222ca63560",
+                    "leftValue": "={{ $('Parse Telegram Callback').item.json.action }}",
+                    "rightValue": "only_video_from_draft",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "only_video_from_draft"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        -16752,
+        17200
+      ],
+      "id": "feb186c1-2f79-569d-aa2c-d109259ce3bd",
+      "name": "Route Editorial Action"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Берём данные из триггера\nconst input = $('Telegram Command and Callback Trigger').first().json;\n// ====== ОБРАБОТКА CALLBACK QUERY ======\nif (input.callback_query) {\n  const callbackData = input.callback_query.data;\n  const chatId = input.callback_query.message.chat.id;\n  const messageId = input.callback_query.message.message_id;\n  \n  // search_more\n  if (callbackData === 'search_more') {\n    return [{json: {\n      action: 'search_more',\n      chat_id: chatId,\n      message_id: messageId\n    }}];\n  }\n  \n  // generate_post\n  if (callbackData.startsWith('generate_post:')) {\n    const postId = parseInt(callbackData.split(':')[1]);\n    return [{json: {\n      action: 'generate_post',\n      post_id: postId,\n      chat_id: chatId,\n      message_id: messageId\n    }}];\n  }\n\n  // Обработка кнопки видео под готовым постом\n  if (callbackData.startsWith('only_video_from_draft:')) {\n    const draftId = parseInt(callbackData.split(':')[1]);\n    return [{json: {\n      action: 'only_video_from_draft',\n      draft_id: draftId,\n      chat_id: chatId,\n      message_id: messageId\n    }}];\n  }\n\n  // schedule_post\n  if (callbackData.startsWith('schedule_post:')) {\n    const parts = callbackData.split(':');\n    const draftId = parseInt(parts[1]);\n    const timeOption = parts[2];\n    let scheduledMoscow = $now.setZone('Europe/Moscow');\n    if (timeOption === '1h') {\n      scheduledMoscow = scheduledMoscow.plus({ hours: 1 });\n    } else if (timeOption === '3h') {\n      scheduledMoscow = scheduledMoscow.plus({ hours: 3 });\n    }\n    const scheduledAt = scheduledMoscow.toUTC().toISO();\n    return [{json: {\n      action: 'schedule_post',\n      draft_id: draftId,\n      scheduled_at: scheduledAt,\n      chat_id: chatId,\n      message_id: messageId,\n      is_custom_date: false\n    }}];\n  }\n  \n  // publish_now\n  if (callbackData.startsWith('publish_now:')) {\n    const draftId = parseInt(callbackData.split(':')[1]);\n    return [{json: {\n      action: 'publish_now',\n      draft_id: draftId,\n      scheduled_at: $now.toUTC().toISO(),\n      chat_id: chatId,\n      message_id: messageId,\n      is_custom_date: false\n    }}];\n  }\n  \n  // schedule_custom\n  if (callbackData.startsWith('schedule_custom:')) {\n    const draftId = parseInt(callbackData.split(':')[1]);\n    return [{json: {\n      action: 'schedule_custom',\n      draft_id: draftId,\n      chat_id: chatId,\n      message_id: messageId\n    }}];\n  }\n}\n\n// ====== ОБРАБОТКА MESSAGE ======\nif (input.message) {\n  const message = input.message;\n  const chatId = message.chat.id;\n  const messageId = message.message_id;\n  \n  // Команда /search_more БЕЗ reply\n  if (!message.reply_to_message) {\n    const text = message.text || '';\n    \n    if (text.toLowerCase().includes('/search_more')) {\n      return [{json: {\n        action: 'search_more',\n        chat_id: chatId,\n        message_id: messageId\n      }}];\n    }\n  }\n  \n  // Reply messages\n  if (message.reply_to_message) {\n    const repliedText = message.reply_to_message.text;\n    const repliedMessageId = message.reply_to_message.message_id;\n    \n    if (repliedText) {\n      // Редактирование поста\n      const editMatch = repliedText.match(/\\(ID:\\s*(\\d+)\\)/i);\n      if (editMatch) {\n        const draftId = parseInt(editMatch[1]);\n        const newContent = message.text;\n        return [{json: {\n          action: 'edit_post',\n          draft_id: draftId,\n          new_content: newContent,\n          chat_id: chatId,\n          message_id: messageId,\n          edit_message_id: repliedMessageId\n        }}];\n      }\n      \n      // Кастомная дата\n      const customMatch = repliedText.match(/Draft ID:\\s*(\\d+)/i);\n      if (customMatch && repliedText.includes('Введите дату и время')) {\n        const draftId = parseInt(customMatch[1]);\n        const userText = message.text;\n        const dateRegex = /(\\d{2})\\.(\\d{2})\\.(\\d{4})\\s+(\\d{2}):(\\d{2})/;\n        const dateMatch = userText.match(dateRegex);\n        \n        if (dateMatch) {\n          const day = dateMatch[1];\n          const month = dateMatch[2];\n          const year = dateMatch[3];\n          const hour = dateMatch[4];\n          const minute = dateMatch[5];\n          const moscowTime = DateTime.fromObject({\n            year: parseInt(year),\n            month: parseInt(month),\n            day: parseInt(day),\n            hour: parseInt(hour),\n            minute: parseInt(minute)\n          }, { zone: 'Europe/Moscow' });\n          const scheduledAt = moscowTime.toUTC().toISO();\n          \n          return [{json: {\n            action: 'schedule_post',\n            draft_id: draftId,\n            scheduled_at: scheduledAt,\n            chat_id: chatId,\n            message_id: messageId,\n            edit_message_id: repliedMessageId,\n            is_custom_date: true\n          }}];\n        }\n      }\n    }\n  }\n}\n\n// Ничего не подошло - останавливаем\nreturn [];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -17088,
+        17264
+      ],
+      "id": "57deab72-e760-559f-be49-37298d603984",
+      "name": "Parse Telegram Callback"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "drafts",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.draft_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "content",
+              "fieldValue": "={{ $json.new_content }}"
+            },
+            {
+              "fieldId": "telegram_message_id",
+              "fieldValue": "={{ $json.edit_message_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -15824,
+        16768
+      ],
+      "id": "edbe6b4b-6e85-5292-89e2-aa9a96ab23e9",
+      "name": "Update Editorial Draft"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "drafts",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "keyValue": "={{ $json.draft_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -15568,
+        17376
+      ],
+      "id": "7508c36a-95b0-5dc7-95d1-1b81efdfa189",
+      "name": "Load Draft for Publishing"
+    },
+    {
+      "parameters": {
+        "tableId": "publications",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "draft_id",
+              "fieldValue": "={{ $('Parse Telegram Callback').item.json.draft_id }}"
+            },
+            {
+              "fieldId": "content",
+              "fieldValue": "={{ $('Load Draft for Publishing').item.json.content }}"
+            },
+            {
+              "fieldId": "content_type",
+              "fieldValue": "post"
+            },
+            {
+              "fieldId": "scheduled_at",
+              "fieldValue": "={{ $('Parse Telegram Callback').item.json.scheduled_at }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "={{ $('Parse Telegram Callback').item.json.action === 'publish_now' ? 'pending' : 'scheduled' }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -15296,
+        17376
+      ],
+      "id": "35859632-901d-5bf5-9cc7-16e8da0a20bd",
+      "name": "Create Publication Job"
+    },
+    {
+      "parameters": {
+        "jsCode": "const action = $('Parse Telegram Callback').item.json.action;\nconst draftId = $('Parse Telegram Callback').item.json.draft_id;\nconst publicationId = $input.first().json.id;\nconst channelName = $('Prepare Settings').item.json.publishing_channel_name;\nconst scheduledAt = $('Parse Telegram Callback').item.json.scheduled_at;\nconst isCustomDate = $('Parse Telegram Callback').item.json.is_custom_date || false;\nconst postContent = $('Load Draft for Publishing').item.json.content;\nconst telegramMessageId = $('Load Draft for Publishing').item.json.telegram_message_id;\n\nlet message = '';\n\nif (action === 'publish_now') {\n  message += '━━━━━━━━━━━━\\n\\n';\n  message = '\\n\\n✅ <b>Пост отправлен в очередь публикации!</b>\\n\\n';\n  message += '━━━━━━━━━━━━\\n\\n';\n  message += postContent + '\\n\\n';\n  message += '━━━━━━━━━━━━\\n\\n';\n  message += '🆔 Publication ID: ' + publicationId + '\\n\\n';\n  message += '📢 Канал: ' + channelName + '\\n\\n';\n  message += '⚡ <i>Публикация произойдёт в ближайшее время</i>\\n\\n';\n} else if (action === 'schedule_post') {\n  const scheduledTime = DateTime.fromISO(scheduledAt, { zone: 'utc' });\n  const moscowTime = scheduledTime.setZone('Europe/Moscow');\n  const timeFormatted = moscowTime.toFormat('dd.MM.yyyy HH:mm');\n  message += '━━━━━━━━━━━━\\n\\n';\n  message = '\\n\\n📅 <b>Публикация запланирована!</b>\\n\\n';\n  message += '⏰ Время: <code>' + timeFormatted + ' (МСК)</code>\\n';\n  message += '📢 Канал: ' + channelName + '\\n\\n';\n  message += '━━━━━━━━━━━━\\n\\n';\n  message += postContent + '\\n\\n';\n  message += '━━━━━━━━━━━━\\n\\n';\n  message += '🆔 Publication ID: ' + publicationId + '\\n\\n';\n  message += '🤖 <i>Бот опубликует автоматически в указанное время</i>\\n\\n';\n}\n\nreturn [{json: {message: message, chat_id: $('Parse Telegram Callback').item.json.chat_id, message_id: $('Parse Telegram Callback').item.json.message_id, publication_id: publicationId, is_custom_date: isCustomDate, telegram_message_id: telegramMessageId}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -15024,
+        17376
+      ],
+      "id": "91d8ebc2-cf4f-5767-a557-d0315a6c6db0",
+      "name": "Format Publishing Confirmation"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.is_custom_date }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    },
+                    "id": "custom-date-check"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "custom_date"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "eb9d65fa-8f0a-5e37-8c62-2a3da5c6c576",
+                    "leftValue": "={{ $json.is_custom_date }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "false",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "regular"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        -14720,
+        17376
+      ],
+      "id": "6be3a830-444c-5d88-9a15-aa78f5df48c1",
+      "name": "Route Telegram Message Type"
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $json.chat_id }}",
+        "messageId": "={{ $json.message_id }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -14352,
+        17712
+      ],
+      "id": "97f419dd-a1b0-5be0-8c7b-06b3dd9cd7a6",
+      "name": "Update Publishing Confirmation"
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $json.chat_id }}",
+        "messageId": "={{ $json.telegram_message_id }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -14112,
+        17360
+      ],
+      "id": "86a92f85-361a-5967-bbf1-33c3239ba72c",
+      "name": "Update Original Draft Message"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "=📅 <b>Введите дату и время публикации</b>\n\n⚠️ <b>ВАЖНО: Указывайте время по Москве (МСК, UTC+3)</b>\n\n<b>Формат:</b> <code>ДД.ММ.ГГГГ ЧЧ:ММ</code>\n\n<b>Примеры:</b>\n- <code>{{ $json.example1 }}</code>\n- <code>{{ $json.example2 }}</code>\n- <code>{{ $json.example3 }}</code>\n\n<b>ОТВЕТЬТЕ на это сообщение с датой!</b>\n\nDraft ID: {{ $json.draft_id }}",
+        "replyMarkup": "forceReply",
+        "forceReply": {
+          "force_reply": true
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -15840,
+        17760
+      ],
+      "id": "bf321925-e1e7-5c8b-b169-8b0a78937eb2",
+      "name": "Request Custom Publishing Time"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst draftId = input.id;\nconst content = input.content || \"Контент не найден\";\nconst moscowNow = $now.setZone('Europe/Moscow');\nconst in1h = moscowNow.plus({ hours: 1 });\nconst in3h = moscowNow.plus({ hours: 3 });\nconst formatTime = (luxonDate) => {\n  return luxonDate.toFormat('HH:mm');\n};\nconst replyMarkup = {\n  inline_keyboard: [\n    [{text: \"✅ Опубликовать сейчас\", callback_data: `publish_now:${draftId}`}],\n    [{text: `⏱ В ${formatTime(in1h)} МСК`, callback_data: `schedule_post:${draftId}:1h`}, {text: `⏱ В ${formatTime(in3h)} МСК`, callback_data: `schedule_post:${draftId}:3h`}],\n    [{text: \"📅 Выбрать дату и время\", callback_data: `schedule_custom:${draftId}`}]\n  ]\n};\nconst messageText = '<b>✅ Пост обновлён!</b>\\n\\nТекст поста:\\n━━━━━━━━━━━━━━━━━━━━\\n\\n' + content + '\\n\\n━━━━━━━━━━━━━━━━━━━━\\n<b>Для того чтобы отредактировать текст ответьте на это сообщение с новым текстом поста.</b>\\n\\nЗапланировать публикацию?\\n\\n<i>Сохранён в черновики (ID: ' + draftId + ')</i>';\nreturn [{json: {id: draftId, content: content, reply_markup: replyMarkup, message_text: messageText, chat_id: $('Parse Telegram Callback').item.json.chat_id, edit_message_id: $('Parse Telegram Callback').item.json.edit_message_id}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -15584,
+        16768
+      ],
+      "id": "9f347c97-f012-5e7c-bd74-42b5b0832485",
+      "name": "Prepare Draft Edit Message"
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $json.chat_id }}",
+        "messageId": "={{ $json.edit_message_id }}",
+        "replyMarkup": "inlineKeyboard",
+        "text": "={{ $json.message_text }}",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.reply_markup.inline_keyboard[0][0].text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.reply_markup.inline_keyboard[0][0].callback_data }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.reply_markup.inline_keyboard[1][0].text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.reply_markup.inline_keyboard[1][0].callback_data }}"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.reply_markup.inline_keyboard[1][1].text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.reply_markup.inline_keyboard[1][1].callback_data }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.reply_markup.inline_keyboard[2][0].text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.reply_markup.inline_keyboard[2][0].callback_data }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -15280,
+        16768
+      ],
+      "id": "29293478-8336-5a8b-b712-e7b712c1e94f",
+      "name": "Update Message after Edit"
+    },
+    {
+      "parameters": {
+        "operation": "deleteMessage",
+        "chatId": "={{ $('Parse Telegram Callback').item.json.chat_id }}",
+        "messageId": "={{ $('Parse Telegram Callback').item.json.message_id }}"
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -14896,
+        16768
+      ],
+      "id": "ffc08e1d-7457-5727-9986-5cfbec423674",
+      "name": "Delete User Edit Message"
+    },
+    {
+      "parameters": {
+        "operation": "deleteMessage",
+        "chatId": "={{ $json.result.chat.id }}",
+        "messageId": "={{ $('Parse Telegram Callback').item.json.edit_message_id }}"
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -13808,
+        17360
+      ],
+      "id": "769ecca5-d639-5485-a4d5-a82ce2c21c39",
+      "name": "Delete Edit Instructions"
+    },
+    {
+      "parameters": {
+        "operation": "deleteMessage",
+        "chatId": "={{ $('Update Original Draft Message').item.json.result.chat.id }}",
+        "messageId": "={{ $('Parse Telegram Callback').item.json.message_id }}"
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -13536,
+        17360
+      ],
+      "id": "54af7ef6-14c7-5a9c-a7fa-d0e82c7f206a",
+      "name": "Delete User Date Message"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "drafts",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Save to Drafts').item.json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "telegram_message_id",
+              "fieldValue": "={{ $json.result.message_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -13776,
+        15984
+      ],
+      "id": "c2447b99-1f08-5bbe-b368-7317c3d5311b",
+      "name": "Save Telegram Message ID"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pass callback and message events to the next node.\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -17392,
+        17264
+      ],
+      "id": "96b861d9-ad90-539f-ab95-cdffa42cfe6f",
+      "name": "Prepare Processing Message",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = $now.setZone('Europe/Moscow');\nconst ex1 = now.plus({days: 1}).set({hour: 14, minute: 0}).toFormat('dd.MM.yyyy HH:mm');\nconst ex2 = now.plus({days: 3}).set({hour: 10, minute: 30}).toFormat('dd.MM.yyyy HH:mm');\nconst ex3 = now.plus({days: 7}).set({hour: 18, minute: 0}).toFormat('dd.MM.yyyy HH:mm');\n\nreturn [{json: {\n  chat_id: $input.first().json.chat_id,\n  draft_id: $input.first().json.draft_id,\n  example1: ex1,\n  example2: ex2,\n  example3: ex3\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16080,
+        17760
+      ],
+      "id": "c5813861-dc47-5e16-adcc-45acf8170e4c",
+      "name": "Generate Publishing Schedule"
+    },
+    {
+      "parameters": {
+        "updates": [
+          "callback_query",
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -18544,
+        17280
+      ],
+      "id": "3ab325ab-c40e-55c5-b85e-aff89159a341",
+      "name": "Telegram Command and Callback Trigger"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9b990475-9702-5ba9-822e-236e94331a73",
+              "leftValue": "={{ $json.callback_query.message.chat.id }}",
+              "rightValue": "={{ $json.admin_chat_id }}",
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "e145b1b5-4895-5790-b63b-9f4b99302c8f",
+              "leftValue": "={{ $json.message.chat.id }}",
+              "rightValue": "={{ $json.admin_chat_id }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "a44cb9d2-e559-5128-b4a0-4d8d99a1ea69",
+              "leftValue": "={{ [Number($json.callback_query?.message?.chat?.id), Number($json.message?.chat?.id)].includes(100000001) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -17664,
+        17280
+      ],
+      "id": "202561aa-3386-5f16-afaf-6b302a3f1bbf",
+      "name": "Authorize Admin User"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "system_settings",
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -18256,
+        17280
+      ],
+      "id": "70a2c127-f59f-58d0-a60a-6d77dfc64409",
+      "name": "Get System Settings"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ПОЛУЧАЕМ ДАННЫЕ ИЗ SETTINGS\nconst items = $input.all();\nconst settings = {};\n\nitems.forEach(item => {\n  const key = item.json.setting_key;\n  const value = item.json.setting_value;\n  settings[key] = value;\n});\n\n// ПОЛУЧАЕМ ДАННЫЕ ИЗ ТРИГГЕРА\nconst triggerData = $('Telegram Command and Callback Trigger').first().json;\n\n// Возвращаем настройки и входные данные\nreturn [{\n  json: {\n    ...triggerData,\n    admin_chat_id: parseInt(settings.admin_chat_id),\n    days_before_ideas: parseInt(settings.days_before_ideas),\n    supabase_url: settings.supabase_url,\n    default_channel_name: settings.default_channel_name,\n    publishing_channel_name: settings.publishing_channel_name,\n    publishing_channel_chat_id: settings.publishing_channel_chat_id,\n    publishing_channel_identifier: settings.publishing_channel_identifier\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -17952,
+        17280
+      ],
+      "id": "58c158b9-2b62-54c6-990d-9fd876098ef8",
+      "name": "Prepare Settings"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "SELECT_WORKFLOW_03_ID",
+          "mode": "id",
+          "cachedResultName": "03 | AI Topic Curation and Daily Digest"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -16432,
+        17808
+      ],
+      "id": "897e2136-fb67-5741-a06a-eb52dfb7efa7",
+      "name": "Call Topic Curation Workflow"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "SELECT_WORKFLOW_05_ID",
+          "mode": "id",
+          "cachedResultName": "05 | WordPress Publishing Pipeline"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -15152,
+        17216
+      ],
+      "id": "13f9f163-130f-519f-9b72-0b263dcf9727",
+      "name": "Call WordPress Publishing Workflow"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "drafts",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "keyValue": "={{ $json.draft_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -16256,
+        17504
+      ],
+      "id": "dcfee628-cd2b-502e-a59e-6376e5c9dc53",
+      "name": "Load Draft for Video"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst draftId = input.id;\nconst content = input.content || \"Контент не найден\";\nconst moscowNow = $now.setZone('Europe/Moscow');\nconst in1h = moscowNow.plus({ hours: 1 });\nconst in3h = moscowNow.plus({ hours: 3 });\n\nconst formatTime = (luxonDate) => {\n  return luxonDate.toFormat('HH:mm');\n};\n\nconst replyMarkup = {\n  inline_keyboard: [\n    // 1-й ряд: Кнопка публикации\n    [{text: \"✅ Опубликовать сейчас\", callback_data: `publish_now:${draftId}`}],\n    \n    // 2-й ряд: Кнопка генерации видео\n    [{text: \"🎬 Сгенерировать видео по посту\", callback_data: `only_video_from_draft:${draftId}`}],\n    \n    // 3-й ряд: Быстрое планирование\n    [{text: `⏱ В ${formatTime(in1h)} МСК`, callback_data: `schedule_post:${draftId}:1h`}, {text: `⏱ В ${formatTime(in3h)} МСК`, callback_data: `schedule_post:${draftId}:3h`}],\n    \n    // 4-й ряд: Кастомное время\n    [{text: \"📅 Выбрать дату и время\", callback_data: `schedule_custom:${draftId}`}]\n  ]\n};\n\nreturn [{json: {id: draftId, content: content, reply_markup: replyMarkup}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -14352,
+        15984
+      ],
+      "id": "2c55f1a2-26d9-5b1f-8fab-b96b9005c223",
+      "name": "Add Editorial Action Buttons"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -16704,
+        17936
+      ],
+      "id": "1bf155b7-02d1-5d9f-bc00-93c344de0f24",
+      "name": "Manual: Start Editorial Assistant"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\nconst formats = [\n  {\n    type: 'expert',\n    name: 'Экспертный пост',\n    instruction: 'Объясни тему спокойно и профессионально. Дай предпринимателю понятный вывод и практический совет.',\n    structure: 'Хук → объяснение ситуации → почему это важно → что проверить → мягкий вопрос в конце.'\n  },\n  {\n    type: 'opinion',\n    name: 'Пост с мнением',\n    instruction: 'Добавь авторскую позицию. Не просто перескажи новость, а объясни, как это видит опытный предприниматель.',\n    structure: 'Хук → позиция автора → аргументы → вывод → вопрос к аудитории.'\n  },\n  {\n    type: 'case',\n    name: 'Кейс / ситуация из практики',\n    instruction: 'Подай тему как типичную бизнес-ситуацию. Без выдуманных имен и цифр, если их нет в источнике.',\n    structure: 'Ситуация → ошибка или риск → последствия → как лучше действовать → вывод.'\n  },\n  {\n    type: 'checklist',\n    name: 'Польза / чек-лист',\n    instruction: 'Сделай максимально прикладной пост. Дай список действий, что предпринимателю проверить или сделать.',\n    structure: 'Хук → короткое объяснение → 3–5 пунктов проверки → итог.'\n  },\n  {\n    type: 'discussion',\n    name: 'Пост для обсуждения',\n    instruction: 'Сделай пост, который аккуратно вовлекает в комментарии. Без провокаций и желтизны.',\n    structure: 'Наблюдение → две стороны вопроса → спокойный вывод → вопрос аудитории.'\n  },\n  {\n    type: 'course_offer',\n    name: 'Мягкий продающий пост',\n    instruction: 'Свяжи тему с пользой обучения или системного подхода. Не продавай агрессивно. Без прямого давления.',\n    structure: 'Проблема → почему важно разобраться → чему стоит научиться → мягкий переход к курсу или обучению.'\n  },\n  {\n    type: 'light_humor',\n    name: 'Легкий деловой юмор',\n    instruction: 'Добавь легкую иронию, но без сленга, грубости и мемного стиля. Юмор должен быть взрослым и деловым.',\n    structure: 'Узнаваемая ситуация → легкая ирония → серьезный вывод → вопрос.'\n  }\n];\n\nconst postId =\n  Number($('Get Source Post').first().json.id || 0) ||\n  Number(Date.now());\n\nconst selected = formats[postId % formats.length];\n\nreturn [\n  {\n    json: {\n      ...input,\n      post_format_type: selected.type,\n      post_format_name: selected.name,\n      post_format_instruction: selected.instruction,\n      post_format_structure: selected.structure\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -15680,
+        15984
+      ],
+      "id": "f8bf58db-1cb4-5904-aa86-fc7ccc8eca67",
+      "name": "Select Post Format"
+    }
+  ],
+  "connections": {
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent: Generate Editorial Draft",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent: Generate Editorial Draft": {
+      "main": [
+        [
+          {
+            "node": "Convert Draft to Telegram Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Result to Telegram": {
+      "main": [
+        [
+          {
+            "node": "Save Telegram Message ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent: Generate Editorial Draft",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Writing Examples": {
+      "main": [
+        [
+          {
+            "node": "Select Post Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Source Post": {
+      "main": [
+        [
+          {
+            "node": "Get Knowledge Base",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Knowledge Base": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Writing Examples",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Drafts": {
+      "main": [
+        [
+          {
+            "node": "Add Editorial Action Buttons",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert Draft to Telegram Format": {
+      "main": [
+        [
+          {
+            "node": "Save to Drafts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Editorial Action": {
+      "main": [
+        [
+          {
+            "node": "Get Source Post",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Editorial Draft",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load Draft for Publishing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load Draft for Publishing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Publishing Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Topic Curation Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load Draft for Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Telegram Callback": {
+      "main": [
+        [
+          {
+            "node": "Route Editorial Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Editorial Draft": {
+      "main": [
+        [
+          {
+            "node": "Prepare Draft Edit Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Draft for Publishing": {
+      "main": [
+        [
+          {
+            "node": "Create Publication Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Publication Job": {
+      "main": [
+        [
+          {
+            "node": "Format Publishing Confirmation",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Call WordPress Publishing Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Publishing Confirmation": {
+      "main": [
+        [
+          {
+            "node": "Route Telegram Message Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Telegram Message Type": {
+      "main": [
+        [
+          {
+            "node": "Update Original Draft Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Publishing Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Original Draft Message": {
+      "main": [
+        [
+          {
+            "node": "Delete Edit Instructions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Draft Edit Message": {
+      "main": [
+        [
+          {
+            "node": "Update Message after Edit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Message after Edit": {
+      "main": [
+        [
+          {
+            "node": "Delete User Edit Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Edit Instructions": {
+      "main": [
+        [
+          {
+            "node": "Delete User Date Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Processing Message": {
+      "main": [
+        [
+          {
+            "node": "Parse Telegram Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Publishing Schedule": {
+      "main": [
+        [
+          {
+            "node": "Request Custom Publishing Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Command and Callback Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get System Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorize Admin User": {
+      "main": [
+        [
+          {
+            "node": "Prepare Processing Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get System Settings": {
+      "main": [
+        [
+          {
+            "node": "Prepare Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Settings": {
+      "main": [
+        [
+          {
+            "node": "Authorize Admin User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Editorial Action Buttons": {
+      "main": [
+        [
+          {
+            "node": "Send Result to Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual: Start Editorial Assistant": {
+      "main": [
+        [
+          {
+            "node": "Call Topic Curation Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Post Format": {
+      "main": [
+        [
+          {
+            "node": "AI Agent: Generate Editorial Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

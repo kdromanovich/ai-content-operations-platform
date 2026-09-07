@@ -1,0 +1,1026 @@
+{
+  "name": "05 | WordPress Publishing Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ String($vars.WORDPRESS_BASE_URL || '').replace(/\\/$/, '') + '/wp-json/wp/v2/posts/' + $('Create Pending WordPress Post').first().json.id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "wordpressApi",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "featured_media",
+              "value": "={{ $json.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "093f4ee1-9438-568e-9d00-4b1ce1b1b6e5",
+      "name": "Attach Featured Image in WordPress",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -23552,
+        320
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "publications",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Filter Ready Posts').item.json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "published"
+            },
+            {
+              "fieldId": "published_at",
+              "fieldValue": "={{ $now.toUTC().toISO() }}"
+            },
+            {
+              "fieldId": "external_id",
+              "fieldValue": "={{ $('Create Pending WordPress Post').item.json.id }}"
+            },
+            {
+              "fieldId": "source",
+              "fieldValue": "wordpress"
+            },
+            {
+              "fieldId": "media_urls",
+              "fieldValue": "={{ [ $('Upload Image to WordPress').item.json.source_url ] }}"
+            },
+            {
+              "fieldId": "publication_url",
+              "fieldValue": "={{ $('Create Pending WordPress Post').item.json.link }}"
+            }
+          ]
+        }
+      },
+      "id": "9e932829-a4f6-52b9-a617-12ae521265e3",
+      "name": "Mark as Published",
+      "type": "n8n-nodes-base.supabase",
+      "position": [
+        -23296,
+        256
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Prepare Settings').item.json.admin_chat_id }}",
+        "text": "=✅ <b>Пост создан в WordPress!</b>\n\n━━━━━━━━━━━━\n{{ $json.content }}\n\n━━━━━━━━━━━━\n\n🆔 ID: <code>{{ $json.id }}</code>\n📺 Канал: <b>{{ $('Prepare Settings').item.json.publishing_channel_name }}</b>\n\n<i>Статус в WordPress: pending. Дальше пост можно проверить и опубликовать.</i>",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -23040,
+        256
+      ],
+      "id": "50c56bca-9fc5-5464-8a48-cdaa24000a39",
+      "name": "Send Confirmation Message"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "publications",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Filter Ready Posts').item.json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "failed"
+            },
+            {
+              "fieldId": "error_message",
+              "fieldValue": "={{ $json.error || $json.message || \"Неизвестная ошибка\" }}"
+            }
+          ]
+        }
+      },
+      "id": "10004570-4e87-5ddd-81ce-e9cd19deaf1c",
+      "name": "Mark as Failed",
+      "type": "n8n-nodes-base.supabase",
+      "position": [
+        -23296,
+        512
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "chatId": "{{ $('Prepare Settings').item.json.admin_chat_id }}",
+        "text": "=❌ <b>Ошибка публикации!</b>\n\n━━━━━━━━━━━━\n\n{{ $json.content }}\n\n━━━━━━━━━━━━\n\n🆔 ID: <code>{{ $json.id }}</code>\n📺 Канал: <b>{{ $('Prepare Settings').item.json.publishing_channel_name }}</b>\n\n⚠️ Текст ошибки:\n\n<code>{{ $json.error || $json.message || 'Неизвестная ошибка' }}</code>\n",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -23040,
+        512
+      ],
+      "id": "c37782f5-b89e-5ec6-b05c-db16da899add",
+      "name": "Send Error Message"
+    },
+    {
+      "parameters": {
+        "tableId": "system_monitoring",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "workflow_name",
+              "fieldValue": "Контент-завод WP"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "succes"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -22816,
+        256
+      ],
+      "id": "ef923839-3e73-5aae-85d6-d2c8373cf46d",
+      "name": "Log Successful WordPress Publication"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "Удали все символы * и # из предоставленного текста. Замени их на пробелы или удали полностью, сохраняя при этом общий смысл и структуру статьи. Верни полностью отформатированный текст без этих символов.\n\nНе удаляй гиперссылки из статьи!\n\nВажные правила:\n- Полностью удаляй символы * и #\n- Сохраняй логику и связность текста\n- Не меняй основной смысл статьи\n- Восстанавливай читаемость текста после удаления символов",
+              "role": "system"
+            },
+            {
+              "content": "={{ $json.content }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4f67721d-d007-5606-8d0a-b8d41201e6e7",
+      "name": "Remove Hashtags",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.6,
+      "position": [
+        -28112,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "Придумай SEO оптимизированный заголовок на указанную тему.\nЗаголовок должен быть грамматически верным, без ошибок.\nНе используй указание текущего года в заголовке.\nВ конце заголовка удали знак припенания.\nДлина заголовка не более 50 символов с пробелами.",
+              "role": "system"
+            },
+            {
+              "content": "={{ $('Filter Ready Posts').item.json['topic'] || $('Filter Ready Posts').item.json['content'].substring(0, 100) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "70840e5f-f784-5629-8445-bf322610a211",
+      "name": "Generate SEO Title",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.6,
+      "position": [
+        -27824,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "Напиши Description длиной до 160 символов с пробелами, по указанному заголовку с использованием ключевых слов.",
+              "role": "system"
+            },
+            {
+              "content": "={{ $json.message.content }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "624f07f3-9045-5414-922c-522c66bee31f",
+      "name": "Generate Meta Description",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.6,
+      "position": [
+        -27472,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "Форматируй заголовки и текст статьи с использованием HTML-тегов таких как <h2>, <p>, <ul>,<li>, <b>, <ol> и т.д.\nВыделяй тэгом <b></b> важные по смыслу слова чтобы подчеркнуть основные тезисы в статье. \nУдали в начале статьи \"```html\"\nУдали в конце статьи \"```\"",
+              "role": "system"
+            },
+            {
+              "content": "={{ $('Remove Hashtags').item.json.message.content }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c65b595b-2afa-594b-970e-0d00a69d7bf7",
+      "name": "Generate WordPress HTML",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.6,
+      "position": [
+        -27120,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "Сгенерируй до 10-ти ключевых слов, по указанному заголовку, ответ выдай через запятую.",
+              "role": "system"
+            },
+            {
+              "content": "={{ $('Generate SEO Title').item.json.message.content }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1a4d3964-d6e7-5f9a-bc3b-8d1f3568b538",
+      "name": "Generate SEO Keywords",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.6,
+      "position": [
+        -26768,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "Convert the title to lowercase.\nTransliterate all Russian letters into Latin.\nUse only Latin letters and numbers.\nThe separator is only a dash (-) between words.\nNo more than 80 characters in total length, including hyphens.\n\nDo not use any other signs and symbols except Latin letters, numbers and hyphens.\n\nThere should be no hyphen at the beginning or end of the URL.\n\nExample of work for the title \"Example of the title for creating a CHPU URL in Russian\":\nprimer-zagolovka-dlya-sozdaniya-chpu-url-na-russkom-yazyke",
+              "role": "system"
+            },
+            {
+              "content": "={{ $('Generate SEO Title').item.json.message.content }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7065ad28-a868-576d-aa92-4c530a10e3d4",
+      "name": "Generate SEO Slug",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.6,
+      "position": [
+        -26768,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "title": "={{ $('Generate SEO Title').item.json.message.content }}",
+        "additionalFields": {
+          "content": "=\n{{ $('Generate WordPress HTML').item.json.message.content }}",
+          "slug": "={{ $json.message.content }}",
+          "status": "pending",
+          "format": "standard",
+          "categories": [
+            1
+          ]
+        }
+      },
+      "id": "6a4d2154-0d92-5d49-9025-8dc775aea3bc",
+      "name": "Create Pending WordPress Post",
+      "type": "n8n-nodes-base.wordpress",
+      "typeVersion": 1,
+      "position": [
+        -26416,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "resize",
+        "width": 1024,
+        "height": 1024,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [
+        -24096,
+        320
+      ],
+      "id": "949fd48c-dca3-52de-baf7-f4fa154f971b",
+      "name": "Resize Featured Image"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "c1c64553-97de-512e-b525-fd2551a8ceba",
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -29392,
+        368
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "system_settings",
+        "returnAll": true
+      },
+      "id": "0aace8ba-8b6f-507f-87ce-d69247f1598b",
+      "name": "Get System Settings",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -29120,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const settings = {};\nconst items = $input.all();\nitems.forEach(item => {\n  const key = item.json.setting_key;\n  const value = item.json.setting_value;\n  settings[key] = value;\n});\nreturn [{\n  json: {\n    admin_chat_id: settings.admin_chat_id,\n    days_before_ideas: settings.days_before_ideas,\n    supabase_url: settings.supabase_url,\n    default_channel_name: settings.default_channel_name,\n    publishing_channel_name: settings.publishing_channel_name,\n    publishing_channel_chat_id: settings.publishing_channel_chat_id,\n    publishing_channel_identifier: settings.publishing_channel_identifier\n  }\n}];"
+      },
+      "id": "21046c7e-dacd-5292-a94b-d83de8c495c9",
+      "name": "Prepare Settings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -28896,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "publications",
+        "limit": 1,
+        "filterType": "string",
+        "filterString": "status=in.(pending,scheduled)&order=created_at.desc&limit=1"
+      },
+      "id": "df88fe82-1d4c-5431-9320-4ef175f618a1",
+      "name": "Get Posts to Publish",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -28672,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const nowMoscow = $now.setZone('Europe/Moscow');\nconst fiveMinutesAgo = nowMoscow.minus({ minutes: 5 });\nconst items = $input.all();\nconst seenIds = new Set();\nconst postsToPublish = items.filter(item => {\n  const post = item.json;\n  if (seenIds.has(post.id)) return false;\n  let isReady = false;\n  if (post.status === 'pending') {\n    isReady = true;\n  } else if (post.status === 'scheduled' && post.scheduled_at) {\n    const scheduledMoscow = DateTime.fromISO(post.scheduled_at, { zone: 'utc' }).setZone('Europe/Moscow');\n    isReady = scheduledMoscow <= nowMoscow && scheduledMoscow >= fiveMinutesAgo;\n  }\n  if (isReady) {\n    seenIds.add(post.id);\n    return true;\n  }\n  return false;\n});\nreturn postsToPublish;"
+      },
+      "id": "6d9745dc-7b85-58c5-a6b9-4f62e5f98202",
+      "name": "Filter Ready Posts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -28496,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "publications",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Filter Ready Posts').item.json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "created_at",
+              "fieldValue": "={{ new Date().toISOString() }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -28320,
+        320
+      ],
+      "id": "8456106b-bc3b-5d0f-93ff-6b0c5bf522e4",
+      "name": "Mark as Processing"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -29392,
+        224
+      ],
+      "id": "dbf05d68-4c2c-509b-8f92-7938a129c0b0",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "queryString": "mimeType contains 'image/' and trashed = false",
+        "returnAll": true,
+        "filter": {
+          "folderId": {
+            "__rl": true,
+            "value": "YOUR_GOOGLE_DRIVE_FOLDER_ID",
+            "mode": "id"
+          },
+          "whatToSearch": "files"
+        },
+        "options": {}
+      },
+      "id": "c22393b1-71a3-5587-8abf-100000001",
+      "name": "Google Drive: Find Candidate Images",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -26160,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const files = $input.all()\n  .map(item => item.json)\n  .filter(f => {\n    const mt = (f.mimeType || '').toLowerCase();\n    const name = (f.name || '').toLowerCase();\n    return mt.startsWith('image/') || /\\.(jpg|jpeg|png|webp)$/i.test(name);\n  })\n  .map(f => ({\n    id: f.id,\n    name: f.name,\n    mimeType: f.mimeType,\n    webViewLink: f.webViewLink || '',\n    thumbnailLink: f.thumbnailLink || '',\n    description: f.description || ''\n  }));\n\nif (!files.length) {\n  throw new Error('В папке Google Drive не найдено изображений. Проверь доступ и ID папки.');\n}\n\nconst title = $('Generate SEO Title').first().json.message?.content || '';\nconst post = $('Filter Ready Posts').first().json || {};\n\nreturn [{\n  json: {\n    title,\n    topic: post.topic || '',\n    content_preview: String(post.content || '').slice(0, 1200),\n    candidates: files.slice(0, 80),\n    total_candidates: files.length\n  }\n}];"
+      },
+      "id": "a2eaa103-f7f8-54c6-8f18-9d100000001",
+      "name": "Prepare Candidate Image List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -25904,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "Ты выбираешь лучшее реальное фото из Google Drive для статьи WordPress. Оценивай по смысловому совпадению темы, заголовка и названия файла. Если названия файлов слабые, выбирай самый универсальный вариант. Верни строго JSON без markdown и пояснений: {\"selected_id\":\"...\",\"selected_name\":\"...\",\"reason\":\"коротко почему\"}. Не придумывай ID, бери только из списка.",
+              "role": "system"
+            },
+            {
+              "content": "=Заголовок статьи: {{ $json.title }}\nТема: {{ $json.topic }}\nФрагмент статьи: {{ $json.content_preview }}\n\nСписок файлов Google Drive JSON:\n{{ JSON.stringify($json.candidates) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cc51f4e7-cbea-59bd-8d8a-8d17d57e0383",
+      "name": "AI: Select Topic-Relevant Image",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.6,
+      "position": [
+        -25632,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const candidates = $('Prepare Candidate Image List').first().json.candidates || [];\nconst raw =\n  $input.first().json.message?.content ||\n  $input.first().json.text ||\n  $input.first().json.output ||\n  '';\n\nlet parsed = {};\ntry {\n  const match = String(raw).match(/\\{[\\s\\S]*\\}/);\n  parsed = match ? JSON.parse(match[0]) : {};\n} catch (e) {\n  parsed = {};\n}\n\nlet selected = candidates.find(f => f.id === parsed.selected_id);\n\n// fallback: если LLM вернула кривой JSON, выбираем детерминированно по ID поста,\n// чтобы при разных постах фото не всегда было первым\nif (!selected) {\n  const postId = Number($('Filter Ready Posts').first().json.id || Date.now());\n  selected = candidates[postId % candidates.length];\n}\n\nreturn [{\n  json: {\n    selected,\n    selected_id: selected.id,\n    selected_name: selected.name,\n    selection_reason: parsed.reason || 'fallback selection',\n    title: $('Generate SEO Title').first().json.message?.content || '',\n    topic: $('Filter Ready Posts').first().json.topic || ''\n  }\n}];"
+      },
+      "id": "b1a75b7a-71b4-556e-9c40-23c076581fc0",
+      "name": "Normalize Selected Image",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -25360,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_DRIVE_FILE_ID",
+          "mode": "id"
+        },
+        "options": {
+          "binaryPropertyName": "data"
+        }
+      },
+      "id": "26ecba33-67c0-58ad-9841-3817da5bfefb",
+      "name": "Google Drive: Download Image",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -25104,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\n\nif (!item.binary || !item.binary.data) {\n  throw new Error('Google Drive не вернул binary data. Проверь, что выбран именно файл-картинка и доступ к Drive работает.');\n}\n\nconst buffer = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst mimeType = item.binary.data.mimeType || 'image/jpeg';\nconst base64 = buffer.toString('base64');\n\nconst title = $('Generate SEO Title').first().json.message?.content || '';\nconst post = $('Filter Ready Posts').first().json || {};\nconst topic = post.topic || title || 'бизнес и предпринимательство';\nconst selected = $('Normalize Selected Image').first().json.selected || {};\nconst reason = $('Normalize Selected Image').first().json.selection_reason || '';\n\nconst prompt = `Edit the provided real portrait photograph for a WordPress featured image about this headline: ${title}.\n\nUse the uploaded photo as the main reference image.\nPreserve the same woman, her face, age, hairstyle, facial proportions and recognizability.\nDo not replace her with another person.\nDo not change identity.\nDo not make her look younger or older.\nDo not distort the face, eyes, hands or body.\n\nCreate a professional business editorial visual for the topic of the article: ${topic}.\nThe image should look suitable for the Business Media Project project: expert, premium, warm, trustworthy, business-oriented.\n\nAdapt the background and atmosphere to the article topic.\nYou may add subtle business-related context: office, documents, analytics, finance, taxes, entrepreneurship, consulting, neutral premium interior.\nDo not add readable text, letters, numbers, logos, watermarks, captions, banners or UI elements.\n\nStyle:\n- realistic photo\n- professional lighting\n- natural skin texture\n- clean composition\n- premium business look\n- not cartoon\n- not fantasy\n- not overprocessed\n- not obvious AI\n\nCrop and adapt to square 1:1 format.\nFinal image must be publication-ready for WordPress and social media.`;\n\nreturn [{\n  json: {\n    grok_prompt: prompt,\n    input_image_data_url: `data:${mimeType};base64,${base64}`,\n    selected_drive_file_id: selected.id || '',\n    selected_drive_file_name: selected.name || '',\n    selection_reason: reason,\n    title,\n    topic\n  }\n}];"
+      },
+      "id": "616a180e-614b-5f87-b82a-5e1a3aaeab89",
+      "name": "Prepare Image Transformation Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -24912,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ \nJSON.stringify({\n  model: \"google/gemini-3.1-flash-image\",\n  messages: [\n    {\n      role: \"user\",\n      content: [\n        { type: \"text\", text: $json.grok_prompt },\n        { type: \"image_url\", image_url: { url: $json.input_image_data_url } }\n      ]\n    }\n  ],\n  modalities: [\"image\", \"text\"],\n  image_config: {\n    aspect_ratio: \"1:1\",\n    image_size: \"1K\"\n  }\n}) \n}}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -24640,
+        320
+      ],
+      "id": "5ab8d7e7-7d23-58e1-a5c4-41f3f81b1451",
+      "name": "Transform Image via AI API"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.item.json;\n\nif (data.error) {\n  throw new Error('OpenRouter API error: ' + JSON.stringify(data.error));\n}\n\n// Основной формат OpenRouter image output:\n// choices[0].message.images[0].image_url.url = data:image/...;base64,...\nconst imageUrl = data?.choices?.[0]?.message?.images?.[0]?.image_url?.url || '';\n\nfunction makeBinaryFromBase64(raw) {\n  let base64Data = String(raw || '');\n\n  let mimeType = 'image/jpeg';\n  const mimeMatch = base64Data.match(/^data:([^;]+);base64,/);\n  if (mimeMatch) mimeType = mimeMatch[1];\n\n  if (base64Data.includes(';base64,')) {\n    base64Data = base64Data.split(';base64,')[1];\n  } else if (base64Data.includes('base64,')) {\n    base64Data = base64Data.split('base64,')[1];\n  }\n\n  base64Data = base64Data.replace(/[^A-Za-z0-9+/=]/g, '');\n\n  if (!base64Data || base64Data.length < 1000) {\n    throw new Error('Слишком короткий base64 изображения от Grok/OpenRouter');\n  }\n\n  const ext = mimeType.includes('png') ? 'png' : 'jpg';\n  const uniqueName = 'grok_cover_' + Date.now() + '.' + ext;\n\n  return this.helpers.prepareBinaryData(\n    Buffer.from(base64Data, 'base64'),\n    uniqueName,\n    mimeType\n  );\n}\n\nif (imageUrl && imageUrl.length > 1000) {\n  const binaryData = await makeBinaryFromBase64.call(this, imageUrl);\n  return {\n    json: { success: true, source: 'choices.message.images', fileName: binaryData.fileName },\n    binary: { data: binaryData }\n  };\n}\n\n// Fallback: ищем длинную base64-строку во всём ответе\nconst allStrings = [];\nfunction extractStrings(obj) {\n  if (typeof obj === 'string') allStrings.push(obj);\n  else if (Array.isArray(obj)) obj.forEach(extractStrings);\n  else if (obj !== null && typeof obj === 'object') Object.values(obj).forEach(extractStrings);\n}\nextractStrings(data);\nallStrings.sort((a, b) => b.length - a.length);\n\nfor (const str of allStrings) {\n  if (str.length > 10000 && (str.includes('base64') || str.startsWith('/9j/') || str.startsWith('iVBOR'))) {\n    const binaryData = await makeBinaryFromBase64.call(this, str);\n    return {\n      json: { success: true, source: 'fallback.long-string', fileName: binaryData.fileName },\n      binary: { data: binaryData }\n    };\n  }\n}\n\nthrow new Error('Grok/OpenRouter не вернул изображение. Проверь model, modalities и баланс OpenRouter.');"
+      },
+      "id": "d05b20fe-618d-56ab-a095-c7b2febb36a3",
+      "name": "Extract Transformed Image",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -24368,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ String($vars.WORDPRESS_BASE_URL || '').replace(/\\/$/, '') + '/wp-json/wp/v2/media' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "wordpressApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-disposition",
+              "value": "={{ 'attachment; filename=\"grok-cover-' + Date.now() + '.jpg\"' }}"
+            },
+            {
+              "name": "content-type",
+              "value": "={{ $binary.data.mimeType || 'image/jpeg' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "id": "ce97e025-0645-5a17-a5c4-79e649ab62bd",
+      "name": "Upload Image to WordPress",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -23824,
+        320
+      ]
+    }
+  ],
+  "connections": {
+    "Attach Featured Image in WordPress": {
+      "main": [
+        [
+          {
+            "node": "Mark as Published",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark as Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark as Published": {
+      "main": [
+        [
+          {
+            "node": "Send Confirmation Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Confirmation Message": {
+      "main": [
+        [
+          {
+            "node": "Log Successful WordPress Publication",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark as Failed": {
+      "main": [
+        [
+          {
+            "node": "Send Error Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remove Hashtags": {
+      "main": [
+        [
+          {
+            "node": "Generate SEO Title",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate SEO Title": {
+      "main": [
+        [
+          {
+            "node": "Generate Meta Description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Meta Description": {
+      "main": [
+        [
+          {
+            "node": "Generate WordPress HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate WordPress HTML": {
+      "main": [
+        [
+          {
+            "node": "Generate SEO Keywords",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate SEO Keywords": {
+      "main": [
+        [
+          {
+            "node": "Generate SEO Slug",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate SEO Slug": {
+      "main": [
+        [
+          {
+            "node": "Create Pending WordPress Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Pending WordPress Post": {
+      "main": [
+        [
+          {
+            "node": "Google Drive: Find Candidate Images",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resize Featured Image": {
+      "main": [
+        [
+          {
+            "node": "Upload Image to WordPress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Get System Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get System Settings": {
+      "main": [
+        [
+          {
+            "node": "Prepare Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Settings": {
+      "main": [
+        [
+          {
+            "node": "Get Posts to Publish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Posts to Publish": {
+      "main": [
+        [
+          {
+            "node": "Filter Ready Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Ready Posts": {
+      "main": [
+        [
+          {
+            "node": "Mark as Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark as Processing": {
+      "main": [
+        [
+          {
+            "node": "Remove Hashtags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Get System Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive: Find Candidate Images": {
+      "main": [
+        [
+          {
+            "node": "Prepare Candidate Image List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Candidate Image List": {
+      "main": [
+        [
+          {
+            "node": "AI: Select Topic-Relevant Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: Select Topic-Relevant Image": {
+      "main": [
+        [
+          {
+            "node": "Normalize Selected Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Selected Image": {
+      "main": [
+        [
+          {
+            "node": "Google Drive: Download Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive: Download Image": {
+      "main": [
+        [
+          {
+            "node": "Prepare Image Transformation Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Image Transformation Request": {
+      "main": [
+        [
+          {
+            "node": "Transform Image via AI API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform Image via AI API": {
+      "main": [
+        [
+          {
+            "node": "Extract Transformed Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Transformed Image": {
+      "main": [
+        [
+          {
+            "node": "Resize Featured Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Image to WordPress": {
+      "main": [
+        [
+          {
+            "node": "Attach Featured Image in WordPress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

@@ -1,0 +1,13 @@
+{
+  "posts": [
+    {
+      "post_id": "sample-topic-001",
+      "category": "Finance",
+      "title": "Weekly cash-flow visibility",
+      "content": "A practical topic about identifying liquidity risk before payments become overdue.",
+      "external_url": "https://example.com/topics/sample-topic-001",
+      "why_recommended": "It gives a small-business owner a concrete management routine."
+    }
+  ]
+}
+

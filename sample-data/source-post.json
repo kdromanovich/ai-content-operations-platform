@@ -1,0 +1,12 @@
+{
+  "platform": "telegram",
+  "external_id": "sample-source-001",
+  "content": "A fictional small business introduces a weekly cash-flow review and assigns owners to overdue invoices.",
+  "external_url": "https://example.com/source/sample-source-001",
+  "media_urls": [],
+  "views_count": 1250,
+  "likes_count": 48,
+  "published_at": "2026-09-01T08:00:00Z",
+  "parsed_at": "2026-09-01T08:05:00Z"
+}
+

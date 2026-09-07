@@ -1,0 +1,1087 @@
+{
+  "name": "03 | AI Topic Curation and Daily Digest",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        6544,
+        2800
+      ],
+      "id": "3c83f30a-cf68-5bf9-94a9-e99fef0f6583",
+      "name": "Manual: Build Topic Digest"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 2
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        6544,
+        2992
+      ],
+      "id": "958c1504-fb88-51f5-8171-07299048ef58",
+      "name": "Scheduled Trigger"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        6544,
+        3200
+      ],
+      "id": "7ad98bb8-cc73-51b1-8119-89d5a8197fbc",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "system_settings",
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        6848,
+        2992
+      ],
+      "id": "4678ca83-fde2-5453-a9f1-b845eaf8d79f",
+      "name": "Get System Settings"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Собираем настройки system_settings в один объект\nconst settings = {};\nfor (const item of $input.all()) {\n  const key = item.json.setting_key;\n  if (!key) continue;\n  settings[key] = item.json.setting_value;\n}\n\nif (!settings.admin_chat_id) {\n  throw new Error('В system_settings не найден admin_chat_id');\n}\nif (!settings.supabase_url) {\n  throw new Error('В system_settings не найден supabase_url');\n}\n\nreturn [{\n  json: {\n    admin_chat_id: String(settings.admin_chat_id),\n    days_before_ideas: Number(settings.days_before_ideas || 21),\n    supabase_url: String(settings.supabase_url).replace(/\\/$/, ''),\n    default_channel_name: settings.default_channel_name || '',\n    ai_prompt_ideas_selector: settings.ai_prompt_ideas_selector || '',\n    ai_prompt_post_generator: settings.ai_prompt_post_generator || ''\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7088,
+        2992
+      ],
+      "id": "31a06db6-21d5-53c2-97a9-153bcb40a6d7",
+      "name": "Prepare Settings"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f536466c-55aa-50e0-a992-1cf81bdc0dc4",
+              "name": "chat_id",
+              "value": "={{ $json.admin_chat_id }}",
+              "type": "string"
+            },
+            {
+              "id": "e774d916-168f-5b2e-973e-12d3377a7b33",
+              "name": "days_before",
+              "value": "={{ $json.days_before_ideas }}",
+              "type": "number"
+            },
+            {
+              "id": "cea7bc25-1bb3-5e32-b609-97508382a65c",
+              "name": "supabase_url",
+              "value": "={{ $json.supabase_url }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        7344,
+        2992
+      ],
+      "id": "e63bfeee-500b-5302-b267-f85df193ee65",
+      "name": "Prepare Curation Inputs"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "source_content",
+        "limit": 150,
+        "filterType": "string",
+        "filterString": "=category=neq.tax&published_at=gte.{{$now.minus({days: 21}).toFormat('yyyy-MM-dd HH:mm:ss')}}&order=published_at.desc&limit=100"
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        7600,
+        2992
+      ],
+      "id": "2801d82c-103d-5ebf-be41-add713c5ca38",
+      "name": "Get Posts"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        7840,
+        2992
+      ],
+      "id": "19eb74ec-ddef-58fb-a48d-ccb5d1749e6c",
+      "name": "Aggregate Source Posts"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "n8n_chat_histories",
+        "limit": 100,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "session_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Prepare Curation Inputs').item.json.chat_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        8096,
+        2992
+      ],
+      "id": "2fd82a23-a03e-5399-be7c-fd8b01268d5d",
+      "name": "Get Chat History",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const allPosts = $('Aggregate Source Posts').first().json.data || [];\nconst chatId = String($('Prepare Curation Inputs').first().json.chat_id || '');\nconst daysBefore = Number($('Prepare Curation Inputs').first().json.days_before || 21);\n\nconst usedPostIds = new Set();\ntry {\n  for (const item of $('Get Chat History').all()) {\n    const message = item.json?.message || {};\n    const content = String(message.content || message || '');\n    for (const match of content.matchAll(/\"post_id\"\\s*:\\s*(\\d+)/g)) {\n      usedPostIds.add(Number(match[1]));\n    }\n  }\n} catch (e) {}\n\nconst ECONOMY_KEYWORDS = [\n  'экономика','экономический','макроэкономика','ключевая ставка','ставка цб',\n  'банк россии','цб рф','центробанк','инфляция','ввп','валовый внутренний продукт',\n  'инвестиции','инвесторы','фондовый рынок','облигации','офз','рубль','курс рубля',\n  'финансы','бюджет','минэкономразвития','промышленность','денежно-кредитная политика'\n];\nconst TAX_KEYWORDS = [\n  'налог','налоги','фнс','ндс','усн','декларация','бухгалтерия','отчетность',\n  'страховые взносы','взносы','штраф','штрафы','самозаняты'\n];\n\nfunction norm(value) {\n  return String(value || '').toLowerCase().replace(/ё/g, 'е').replace(/\\s+/g, ' ').trim();\n}\nfunction hasAny(text, words) {\n  const t = norm(text);\n  return words.some(word => t.includes(norm(word)));\n}\n\nconst newPosts = allPosts.filter(post => {\n  const id = Number(post.id);\n  if (!id || usedPostIds.has(id)) return false;\n  const category = norm(post.category);\n  const combined = `${post.title || ''} ${post.content || ''} ${post.external_url || ''}`;\n  if (category === 'tax') return false;\n  if (hasAny(combined, TAX_KEYWORDS) && !hasAny(combined, ECONOMY_KEYWORDS)) return false;\n  return hasAny(`${category} ${combined}`, ECONOMY_KEYWORDS);\n});\n\nreturn [{\n  json: {\n    source_type: 'supabase_candidates',\n    chat_id: chatId,\n    days_before: daysBefore,\n    used_posts_count: usedPostIds.size,\n    new_posts: newPosts.slice(0, 15),\n    stats: { total: allPosts.length, available_new: newPosts.length }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8400,
+        2752
+      ],
+      "id": "5542e871-2cf5-5ff4-b9f1-99690f67efbc",
+      "name": "Filter Used Posts",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        8896,
+        2976
+      ],
+      "id": "fbc617b0-40d9-57f1-b915-100000001e",
+      "name": "OpenAI Chat Model",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Вот список постов из Supabase:\n{{ JSON.stringify($json.new_posts) }}",
+        "options": {
+          "systemMessage": "ВАЖНО: выбери РОВНО 3 лучшие новости из Supabase по теме «Экономика, ключевая ставка, ВВП, инвестиции».\n\nВыбирай материалы про экономику, ключевую ставку, Банк России, инфляцию, ВВП, инвестиции, фондовый рынок, облигации, ОФЗ, рубль, бюджет, промышленность и макроэкономику.\n\nНе выбирай материалы, где главная тема - налоги, ФНС, НДС, УСН, декларации, бухгалтерская отчетность, штрафы и взносы.\n\nВерни ТОЛЬКО валидный JSON без markdown и пояснений:\n{\n  \"posts\": [\n    {\n      \"post_id\": 123,\n      \"category\": \"Экономика\",\n      \"title\": \"точный или аккуратно сокращенный заголовок\",\n      \"content\": \"краткое описание идеи в 2-3 предложениях\",\n      \"views_count\": 0,\n      \"likes_count\": 0,\n      \"importance_score\": 0,\n      \"published_at\": \"2026-07-06T00:00:00\",\n      \"external_url\": \"https://example.com\",\n      \"why_recommended\": \"почему это важно предпринимателю\"\n    }\n  ]\n}\n\nНе выдумывай post_id. Используй только ID из входного списка. Если подходящих материалов меньше 3, верни столько, сколько есть."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        9088,
+        2752
+      ],
+      "id": "a19c1dd7-b5ff-56b5-a004-fe2f7e0a1fee",
+      "name": "AI Agent: Select 3 Database Topics",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nlet content = response.output || response.text || response.message?.content || response.data || '';\nif (typeof content !== 'string') content = JSON.stringify(content);\ncontent = content.replace(/```json/gi, '').replace(/```/g, '').trim();\n\nlet parsed;\nconst objectMatch = content.match(/\\{[\\s\\S]*\\}/);\nconst arrayMatch = content.match(/\\[[\\s\\S]*\\]/);\ntry {\n  if (objectMatch) parsed = JSON.parse(objectMatch[0]);\n  else if (arrayMatch) parsed = { posts: JSON.parse(arrayMatch[0]) };\n  else throw new Error('JSON не найден');\n} catch (e) {\n  throw new Error('Не удалось распарсить ответ AI Supabase: ' + content.slice(0, 1000) + '\\n' + e.message);\n}\nif (Array.isArray(parsed)) parsed = { posts: parsed };\nif (!Array.isArray(parsed.posts)) throw new Error('В ответе AI Supabase нет массива posts');\n\nconst posts = parsed.posts.slice(0, 3).map((post, index) => {\n  const postId = Number(post.post_id || post.id || post.source_content_id);\n  if (!postId) throw new Error(`Supabase идея ${index + 1}: нет post_id`);\n  return {\n    post_id: postId,\n    source_type: 'supabase',\n    source_name: post.source_name || 'Supabase',\n    category: post.category || 'Экономика',\n    title: post.title || `Идея ${index + 1}`,\n    content: post.content || post.description || post.summary || '',\n    views_count: Number(post.views_count || 0),\n    likes_count: Number(post.likes_count || 0),\n    importance_score: Number(post.importance_score || 0),\n    published_at: post.published_at || null,\n    external_url: post.external_url || post.source_url || '',\n    why_recommended: post.why_recommended || 'Полезно для предпринимателя'\n  };\n});\n\nreturn [{ json: {\n  source_type: 'supabase',\n  chat_id: String($('Prepare Curation Inputs').first().json.chat_id || ''),\n  posts\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        9440,
+        2752
+      ],
+      "id": "eae228e0-5596-571b-a807-a580568dce3b",
+      "name": "Parse 3 Database Topics"
+    },
+    {
+      "parameters": {
+        "url": "https://rssexport.rbc.ru/rbcnews/news/30/full.rss",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (compatible; n8n RSS Reader/1.0)"
+            },
+            {
+              "name": "Accept",
+              "value": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8400,
+        3120
+      ],
+      "id": "58bdc10f-168f-5f04-98c1-41f85df62929",
+      "name": "RSS: RBC",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://www.kommersant.ru/RSS/news.xml",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (compatible; n8n RSS Reader/1.0)"
+            },
+            {
+              "name": "Accept",
+              "value": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8400,
+        3280
+      ],
+      "id": "a1256b03-1736-5e08-8776-1fb5b08cec1e",
+      "name": "RSS: Kommersant",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://www.interfax.ru/rss.asp",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (compatible; n8n RSS Reader/1.0)"
+            },
+            {
+              "name": "Accept",
+              "value": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8400,
+        3440
+      ],
+      "id": "4d5ff714-7628-5dc6-a512-4a97e64351f7",
+      "name": "RSS: Interfax",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://www.vedomosti.ru/rss/news",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (compatible; n8n RSS Reader/1.0)"
+            },
+            {
+              "name": "Accept",
+              "value": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8400,
+        3600
+      ],
+      "id": "5c94fbf2-9a90-5681-a631-b027d6120ab3",
+      "name": "RSS: Vedomosti",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        8688,
+        3360
+      ],
+      "id": "178748ec-641e-547e-8a35-8f004905ceef",
+      "name": "Merge RSS Feeds"
+    },
+    {
+      "parameters": {
+        "jsCode": "function extractPayload(value) {\n  if (typeof value === 'string') return value;\n  if (!value || typeof value !== 'object') return '';\n\n  if (typeof value.data === 'string') return value.data;\n  if (typeof value.body === 'string') return value.body;\n  if (typeof value.response === 'string') return value.response;\n\n  if (value.data && typeof value.data === 'object') {\n    return JSON.stringify(value.data);\n  }\n  if (value.body && typeof value.body === 'object') {\n    return JSON.stringify(value.body);\n  }\n\n  return JSON.stringify(value);\n}\n\nfunction decodeXml(value) {\n  return String(value || '')\n    .replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/gi, '$1')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&amp;/gi, '&')\n    .replace(/&lt;/gi, '<')\n    .replace(/&gt;/gi, '>')\n    .replace(/&quot;/gi, '\"')\n    .replace(/&apos;/gi, \"'\")\n    .replace(/&#39;/gi, \"'\")\n    .replace(/&nbsp;/gi, ' ')\n    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => {\n      try { return String.fromCodePoint(parseInt(hex, 16)); } catch { return ''; }\n    })\n    .replace(/&#(\\d+);/g, (_, num) => {\n      try { return String.fromCodePoint(parseInt(num, 10)); } catch { return ''; }\n    })\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nfunction getTag(block, names) {\n  for (const name of names) {\n    const safe = name.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\n    const match = block.match(\n      new RegExp(`<${safe}(?:\\\\s[^>]*)?>([\\\\s\\\\S]*?)<\\\\/${safe}>`, 'i')\n    );\n    if (match?.[1]) return match[1];\n  }\n  return '';\n}\n\nfunction getLink(block) {\n  const normal = getTag(block, ['link', 'guid', 'id']);\n  if (normal) {\n    const decoded = decodeXml(normal);\n    const urlMatch = decoded.match(/https?:\\/\\/[^\\s\"'<>]+/i);\n    if (urlMatch) return urlMatch[0];\n  }\n\n  const atom = block.match(/<link\\b[^>]*\\bhref=[\"']([^\"']+)[\"'][^>]*\\/?>/i);\n  if (atom?.[1]) return decodeXml(atom[1]);\n\n  const anyUrl = block.match(/https?:\\/\\/[^\\s\"'<>]+/i);\n  return anyUrl?.[0] ? decodeXml(anyUrl[0]) : '';\n}\n\nfunction parseFeed(xml, sourceName, limit = 30) {\n  if (!xml || typeof xml !== 'string') return [];\n\n  let blocks = [...xml.matchAll(/<item\\b[^>]*>([\\s\\S]*?)<\\/item>/gi)]\n    .map(match => match[1]);\n\n  if (!blocks.length) {\n    blocks = [...xml.matchAll(/<entry\\b[^>]*>([\\s\\S]*?)<\\/entry>/gi)]\n      .map(match => match[1]);\n  }\n\n  const result = [];\n\n  for (const block of blocks) {\n    const title = decodeXml(getTag(block, ['title']));\n    const link = getLink(block);\n    const description = decodeXml(\n      getTag(block, ['description', 'content:encoded', 'summary', 'content'])\n    ).slice(0, 1200);\n\n    const dateRaw = decodeXml(\n      getTag(block, ['pubDate', 'dc:date', 'published', 'updated', 'date'])\n    );\n\n    if (!title || title.length < 5) continue;\n    if (!/^https?:\\/\\//i.test(link)) continue;\n\n    let publishedAt = null;\n    let timestamp = 0;\n\n    if (dateRaw) {\n      const parsedDate = new Date(dateRaw);\n      if (!Number.isNaN(parsedDate.getTime())) {\n        timestamp = parsedDate.getTime();\n        publishedAt = parsedDate.toISOString();\n      }\n    }\n\n    const ageHours = timestamp\n      ? (Date.now() - timestamp) / 3600000\n      : null;\n\n    result.push({\n      title,\n      link,\n      description,\n      source: sourceName,\n      published_at: publishedAt,\n      timestamp,\n      is_fresh: ageHours === null || ageHours <= 96\n    });\n\n    if (result.length >= limit) break;\n  }\n\n  return result;\n}\n\nconst feeds = [\n  {\n    source: 'РБК',\n    payload: extractPayload($('RSS: RBC').first().json)\n  },\n  {\n    source: 'Коммерсантъ',\n    payload: extractPayload($('RSS: Kommersant').first().json)\n  },\n  {\n    source: 'Интерфакс',\n    payload: extractPayload($('RSS: Interfax').first().json)\n  },\n  {\n    source: 'Ведомости',\n    payload: extractPayload($('RSS: Vedomosti').first().json)\n  }\n];\n\nlet allNews = [];\nconst feedDiagnostics = [];\n\nfor (const feed of feeds) {\n  const parsed = parseFeed(feed.payload, feed.source, 30);\n  allNews.push(...parsed);\n\n  feedDiagnostics.push({\n    source: feed.source,\n    payload_length: feed.payload.length,\n    parsed_count: parsed.length\n  });\n}\n\nif (!allNews.length) {\n  throw new Error(\n    'Ни один RSS не удалось распарсить. Диагностика: ' +\n    JSON.stringify(feedDiagnostics)\n  );\n}\n\nconst shownUrls = new Set();\ntry {\n  for (const item of $('Get Chat History').all()) {\n    const content = String(\n      item.json?.message?.content ||\n      item.json?.message ||\n      item.json?.content ||\n      ''\n    );\n\n    for (const match of content.matchAll(/https?:\\/\\/[^\"'\\s\\\\]+/g)) {\n      shownUrls.add(match[0].replace(/[?#].*$/, '').replace(/\\/$/, ''));\n    }\n  }\n} catch (e) {}\n\nfunction normalizeUrl(value) {\n  return String(value || '')\n    .trim()\n    .replace(/&amp;/gi, '&')\n    .replace(/[?#].*$/, '')\n    .replace(/\\/$/, '');\n}\n\nconst seenUrls = new Set();\nconst seenTitles = new Set();\n\nallNews = allNews.filter(item => {\n  const urlKey = normalizeUrl(item.link);\n  const titleKey = item.title\n    .toLowerCase()\n    .replace(/ё/g, 'е')\n    .replace(/[^а-яa-z0-9]/gi, '')\n    .slice(0, 80);\n\n  if (!urlKey || seenUrls.has(urlKey)) return false;\n  if (titleKey && seenTitles.has(titleKey)) return false;\n\n  seenUrls.add(urlKey);\n  if (titleKey) seenTitles.add(titleKey);\n  return true;\n});\n\nallNews = allNews.map(item => ({\n  ...item,\n  already_shown: shownUrls.has(normalizeUrl(item.link))\n}));\n\nallNews.sort((a, b) => {\n  const shownDiff =\n    Number(Boolean(a.already_shown)) -\n    Number(Boolean(b.already_shown));\n  if (shownDiff !== 0) return shownDiff;\n\n  const freshDiff =\n    Number(Boolean(b.is_fresh)) -\n    Number(Boolean(a.is_fresh));\n  if (freshDiff !== 0) return freshDiff;\n\n  return (b.timestamp || 0) - (a.timestamp || 0);\n});\n\nif (allNews.length < 4) {\n  throw new Error(\n    `RSS вернули только ${allNews.length} подходящих новостей. ` +\n    `Диагностика: ${JSON.stringify(feedDiagnostics)}`\n  );\n}\n\nconst newsList = allNews.map((item, index) => [\n  `${index + 1}. [${item.source}] ${item.title}`,\n  `Описание RSS: ${item.description || 'нет описания'}`,\n  `Дата: ${item.published_at || 'не указана'}`,\n  `URL: ${item.link}`,\n  `Свежая: ${item.is_fresh ? 'ДА' : 'НЕТ'}`,\n  `Уже показывали: ${item.already_shown ? 'ДА' : 'НЕТ'}`\n].join('\\n')).join('\\n\\n');\n\nreturn [{\n  json: {\n    newsList,\n    allNews,\n    sourcesFound: [...new Set(allNews.map(item => item.source))],\n    feedDiagnostics\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8944,
+        3360
+      ],
+      "id": "9de6e95b-7a23-5a94-ad7e-07c3c884a7ea",
+      "name": "Parse RSS Items"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Из списка ниже выбери РОВНО 4 разные новости.\n\nСПИСОК:\n{{ $json.newsList }}\n\nПравила:\n- используй только новости из предоставленного списка;\n- верни ровно 4 объекта;\n- не выдумывай заголовки, URL, источники и даты;\n- по возможности выбирай новости из разных источников;\n- если один источник не отдал подходящих новостей, разрешается взять две новости другого источника;\n- сначала выбирай новости, где «Уже показывали: НЕТ»;\n- затем отдавай приоритет новостям, где «Свежая: ДА»;\n- выбирай темы, полезные российскому предпринимателю: экономика, бизнес, финансы, банки, ключевая ставка, инфляция, ВВП, инвестиции, промышленность, законы и регулирование;\n- исключай СВО, спорт, культуру, происшествия и зарубежную геополитику как главную тему;\n- description: 2-3 предложения, что произошло и почему это важно для бизнеса;\n- full: дополнительный контекст для генерации будущего поста.\n\nВерни ТОЛЬКО валидный JSON-массив без markdown и пояснений:\n[\n  {\n    \"title\": \"точный заголовок из списка\",\n    \"description\": \"2-3 предложения\",\n    \"full\": \"дополнительный контекст\",\n    \"source_name\": \"точное название источника из списка\",\n    \"source_url\": \"точный URL из списка\",\n    \"published_at\": \"ISO-дата или null\"\n  }\n]",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        9200,
+        3360
+      ],
+      "id": "b4d8a924-7a3b-55a7-8427-c35a275b1729",
+      "name": "Perplexity: Select 4 RSS Topics"
+    },
+    {
+      "parameters": {
+        "model": "perplexity/sonar-pro-search",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        9200,
+        3584
+      ],
+      "id": "f06b6f0f-b3bc-538b-9e5b-a708175b1ef8",
+      "name": "Perplexity Model via OpenRouter"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nlet content =\n  response.text ||\n  response.output ||\n  response.message?.content ||\n  '';\n\nif (typeof content !== 'string') {\n  content = JSON.stringify(content);\n}\n\ncontent = content\n  .replace(/```json/gi, '')\n  .replace(/```/g, '')\n  .trim();\n\nlet modelRows = [];\n\nconst jsonMatch = content.match(/\\[[\\s\\S]*\\]/);\nif (jsonMatch) {\n  try {\n    const parsed = JSON.parse(jsonMatch[0]);\n    if (Array.isArray(parsed)) modelRows = parsed;\n  } catch (e) {\n    // При ошибке разбора список будет собран напрямую из RSS.\n  }\n}\n\nlet original = [];\ntry {\n  original = $('Parse RSS Items').first().json.allNews || [];\n} catch (e) {}\n\nif (!Array.isArray(original)) original = [];\n\nif (original.length < 4) {\n  throw new Error(\n    `После парсинга доступно только ${original.length} RSS-новостей`\n  );\n}\n\nfunction normalizeUrl(value) {\n  return String(value || '')\n    .trim()\n    .replace(/&amp;/gi, '&')\n    .replace(/[?#].*$/, '')\n    .replace(/\\/$/, '');\n}\n\nfunction normalizeTitle(value) {\n  return String(value || '')\n    .toLowerCase()\n    .replace(/ё/g, 'е')\n    .replace(/[^а-яa-z0-9]/gi, '')\n    .slice(0, 120);\n}\n\nconst originalByUrl = new Map();\nconst originalByTitle = new Map();\n\nfor (const item of original) {\n  const urlKey = normalizeUrl(\n    item.link ||\n    item.external_url ||\n    item.source_url\n  );\n\n  const titleKey = normalizeTitle(item.title);\n\n  if (urlKey) originalByUrl.set(urlKey, item);\n  if (titleKey && !originalByTitle.has(titleKey)) {\n    originalByTitle.set(titleKey, item);\n  }\n}\n\nfunction findOriginal(row) {\n  const urlKey = normalizeUrl(\n    row.source_url ||\n    row.url ||\n    row.link\n  );\n\n  if (urlKey && originalByUrl.has(urlKey)) {\n    return originalByUrl.get(urlKey);\n  }\n\n  const titleKey = normalizeTitle(row.title);\n  if (titleKey && originalByTitle.has(titleKey)) {\n    return originalByTitle.get(titleKey);\n  }\n\n  return null;\n}\n\nfunction makePost(item, modelRow = null) {\n  const url = String(\n    item.link ||\n    item.external_url ||\n    item.source_url ||\n    ''\n  ).trim();\n\n  return {\n    source_type: 'rss',\n    source_name: item.source || modelRow?.source_name || 'RSS',\n    title: String(item.title || modelRow?.title || '').trim(),\n    content: String(\n      modelRow?.description ||\n      modelRow?.short ||\n      item.description ||\n      'Свежая новость из RSS.'\n    ).trim(),\n    full: String(\n      modelRow?.full ||\n      modelRow?.description ||\n      item.description ||\n      item.title ||\n      ''\n    ).trim(),\n    external_url: url,\n    published_at:\n      item.published_at ||\n      modelRow?.published_at ||\n      null,\n    category: 'economy',\n    already_shown: Boolean(item.already_shown),\n    is_fresh: item.is_fresh !== false\n  };\n}\n\nconst selected = [];\nconst selectedUrls = new Set();\nconst usedSources = new Set();\nlet acceptedFromModel = 0;\n\nfor (const row of modelRows) {\n  const originalItem = findOriginal(row);\n  if (!originalItem) continue;\n\n  const urlKey = normalizeUrl(originalItem.link);\n  if (!urlKey || selectedUrls.has(urlKey)) continue;\n\n  const post = makePost(originalItem, row);\n  selected.push(post);\n  selectedUrls.add(urlKey);\n  usedSources.add(post.source_name);\n  acceptedFromModel++;\n\n  if (selected.length >= 4) break;\n}\n\n// Если модель вернула меньше четырёх реальных новостей,\n// автоматически дополняем список из RSS.\nwhile (selected.length < 4) {\n  const remaining = original.filter(item => {\n    const urlKey = normalizeUrl(item.link);\n    return urlKey && !selectedUrls.has(urlKey);\n  });\n\n  if (!remaining.length) break;\n\n  remaining.sort((a, b) => {\n    const aNewSource = usedSources.has(a.source) ? 0 : 1;\n    const bNewSource = usedSources.has(b.source) ? 0 : 1;\n    if (bNewSource !== aNewSource) return bNewSource - aNewSource;\n\n    const aNotShown = a.already_shown ? 0 : 1;\n    const bNotShown = b.already_shown ? 0 : 1;\n    if (bNotShown !== aNotShown) return bNotShown - aNotShown;\n\n    const aFresh = a.is_fresh === false ? 0 : 1;\n    const bFresh = b.is_fresh === false ? 0 : 1;\n    if (bFresh !== aFresh) return bFresh - aFresh;\n\n    const aTime = new Date(a.published_at || 0).getTime() || 0;\n    const bTime = new Date(b.published_at || 0).getTime() || 0;\n    return bTime - aTime;\n  });\n\n  const item = remaining[0];\n  const post = makePost(item);\n\n  selected.push(post);\n  selectedUrls.add(normalizeUrl(item.link));\n  usedSources.add(post.source_name);\n}\n\nif (selected.length !== 4) {\n  throw new Error(\n    `Не удалось собрать 4 RSS-новости. Собрано: ${selected.length}`\n  );\n}\n\nreturn [{\n  json: {\n    source_type: 'rss_selected',\n    posts: selected.map(({ already_shown, is_fresh, ...post }) => post),\n    accepted_from_perplexity: acceptedFromModel,\n    filled_directly_from_rss: 4 - acceptedFromModel,\n    available_sources: [...new Set(original.map(item => item.source))]\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        9440,
+        3360
+      ],
+      "id": "fb70e8ed-06d3-5aee-a7e1-401764b1ad1f",
+      "name": "Parse 4 RSS Topics"
+    },
+    {
+      "parameters": {
+        "jsCode": "const selected = $input.first().json.posts || [];\nif (!Array.isArray(selected) || selected.length !== 4) {\n  throw new Error('Для записи в source_content требуется ровно 4 RSS-новости');\n}\n\nfunction hash32(text) {\n  let h = 100000001;\n  for (let i = 0; i < text.length; i++) {\n    h ^= text.charCodeAt(i);\n    h = Math.imul(h, 16777619);\n  }\n  return ((h >>> 0) % 100000001) || 1;\n}\n\nconst now = new Date().toISOString();\nconst rows = selected.map(item => ({\n  platform: 'website',\n  title: item.title || 'Без названия',\n  content: [item.content, item.full].filter(Boolean).join('\\n\\n') || item.title || 'Без описания',\n  external_id: hash32(item.external_url),\n  external_url: item.external_url,\n  views_count: 0,\n  likes_count: 0,\n  published_at: item.published_at || now,\n  parsed_at: now,\n  category: item.category || 'economy'\n}));\n\nreturn [{ json: {\n  selected,\n  insert_body: JSON.stringify(rows)\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        9696,
+        3360
+      ],
+      "id": "d8f48cd6-91e3-5f1a-ae0a-1093c8af55af",
+      "name": "Prepare RSS Topics for Storage"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Prepare Settings').first().json.supabase_url }}/rest/v1/source_content",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.insert_body }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        9968,
+        3360
+      ],
+      "id": "147337d5-b949-5bd7-8758-6d6a8e8885c4",
+      "name": "Store 4 RSS Topics"
+    },
+    {
+      "parameters": {
+        "jsCode": "const selected = $('Parse 4 RSS Topics').first().json.posts || [];\nconst rawItems = $input.all().map(i => i.json);\nconst inserted = [];\n\nfunction collect(value) {\n  if (!value) return;\n  if (Array.isArray(value)) { value.forEach(collect); return; }\n  if (Array.isArray(value.body)) { value.body.forEach(collect); return; }\n  if (Array.isArray(value.data)) { value.data.forEach(collect); return; }\n  if (value.id) inserted.push(value);\n}\nrawItems.forEach(collect);\n\nconst byUrl = new Map(inserted.map(row => [String(row.external_url || ''), row]));\nconst posts = selected.map((item, index) => {\n  const row = byUrl.get(String(item.external_url)) || inserted[index];\n  const id = Number(row?.id);\n  if (!id) throw new Error(`RSS идея ${index + 1} не получила id из source_content`);\n  return {\n    post_id: id,\n    source_type: 'rss',\n    source_name: item.source_name || 'RSS',\n    category: item.category || 'economy',\n    title: item.title,\n    content: item.content || item.full || '',\n    why_recommended: item.content || 'Свежая новость для предпринимателя',\n    published_at: item.published_at || row?.published_at || null,\n    external_url: item.external_url,\n    views_count: 0,\n    likes_count: 0,\n    importance_score: 0\n  };\n});\n\nreturn [{ json: {\n  source_type: 'rss',\n  chat_id: String($('Prepare Curation Inputs').first().json.chat_id || ''),\n  posts\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        10224,
+        3360
+      ],
+      "id": "ef0c2f63-0662-5db8-9826-f016e1a081ab",
+      "name": "Normalize 4 RSS Topics"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        10496,
+        2992
+      ],
+      "id": "3f4cd292-197e-5478-ac23-a3d4b9eb9246",
+      "name": "Merge RSS and Database Topics"
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputs = $input.all().map(i => i.json);\nconst rssBlock = inputs.find(x => x.source_type === 'rss') || {};\nconst supabaseBlock = inputs.find(x => x.source_type === 'supabase') || {};\n\nconst rss = Array.isArray(rssBlock.posts) ? rssBlock.posts.slice(0, 4) : [];\nconst supabase = Array.isArray(supabaseBlock.posts) ? supabaseBlock.posts.slice(0, 3) : [];\nconst posts = [...rss, ...supabase].map((post, index) => ({ ...post, idea_number: index + 1 }));\n\nif (rss.length !== 4) throw new Error(`Ожидалось 4 RSS-идеи, получено ${rss.length}`);\nif (supabase.length === 0) throw new Error('Supabase не вернул ни одной идеи');\n\nreturn [{ json: {\n  chat_id: String(supabaseBlock.chat_id || rssBlock.chat_id || $('Prepare Curation Inputs').first().json.chat_id || ''),\n  posts,\n  rss_count: rss.length,\n  supabase_count: supabase.length\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        10736,
+        2992
+      ],
+      "id": "da351055-0853-58f5-99d6-d92ade659769",
+      "name": "Build 7-Topic Digest"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst posts = Array.isArray(input.posts) ? input.posts.slice(0, 7) : [];\nconst chat_id = String(input.chat_id || '');\nif (!chat_id) throw new Error('Нет chat_id для Telegram');\n\nfunction esc(value) {\n  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;').replace(/\"/g, '&quot;').replace(/'/g, '&#039;');\n}\nfunction cut(value, max = 210) {\n  const text = String(value ?? '').trim();\n  return text.length <= max ? text : text.slice(0, max - 1).trimEnd() + '…';\n}\nfunction formatDate(value) {\n  if (!value) return '';\n  const d = new Date(value);\n  if (isNaN(d.getTime())) return '';\n  return d.toLocaleString('ru-RU', {\n    timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', year: 'numeric',\n    hour: '2-digit', minute: '2-digit'\n  }) + ' МСК';\n}\n\nlet text = '<b>⚡️ 7 идей на сегодня: 4 свежие новости + 3 из базы</b>\\n\\n';\nposts.forEach((post, index) => {\n  const isRss = post.source_type === 'rss';\n  const marker = isRss ? '📰' : '🗄';\n  const source = isRss ? `RSS - ${post.source_name || 'Источник'}` : 'Supabase';\n  text += `<b>${marker} Идея ${index + 1} - ${esc(source)}</b>\\n`;\n  text += `<b>${esc(post.title || `Идея ${index + 1}`)}</b>\\n`;\n  const description = cut(post.content || post.why_recommended || '', 210);\n  if (description) text += `<i>${esc(description)}</i>\\n`;\n  const date = formatDate(post.published_at);\n  if (date) text += `📅 ${esc(date)}\\n`;\n  const url = String(post.external_url || '').trim();\n  if (url.startsWith('http')) text += `🔗 <a href=\"${esc(url)}\">Читать оригинал</a>\\n`;\n  text += '━━━━━━━━━━━━\\n\\n';\n});\ntext += '👇 <b>Что берем в работу?</b>';\n\nfunction bText(i) { return posts[i]?.post_id ? `📝 Идея ${i + 1}` : `⛔️ Нет идеи ${i + 1}`; }\nfunction bCallback(i) { return posts[i]?.post_id ? `generate_post:${posts[i].post_id}` : `no_idea:${i + 1}`; }\n\nconst result = { chat_id, text, posts };\nfor (let i = 0; i < 7; i++) {\n  result[`button${i + 1}_text`] = bText(i);\n  result[`button${i + 1}_callback`] = bCallback(i);\n}\nresult.button8_text = '🔍 Искать другие';\nresult.button8_callback = 'search_more';\nresult.reply_markup = {\n  inline_keyboard: [\n    [{ text: bText(0), callback_data: bCallback(0) }, { text: bText(1), callback_data: bCallback(1) }],\n    [{ text: bText(2), callback_data: bCallback(2) }, { text: bText(3), callback_data: bCallback(3) }],\n    [{ text: bText(4), callback_data: bCallback(4) }, { text: bText(5), callback_data: bCallback(5) }],\n    [{ text: bText(6), callback_data: bCallback(6) }],\n    [{ text: '🔍 Искать другие', callback_data: 'search_more' }]\n  ]\n};\nreturn [{ json: result }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        10992,
+        2992
+      ],
+      "id": "971bc395-c019-5b13-b98a-12e73a08d4f3",
+      "name": "Format Telegram Topic Digest"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Prepare Settings').first().json.supabase_url }}/rest/v1/source_content?id=in.({{ $('Build 7-Topic Digest').first().json.posts.map(p => Number(p.post_id)).filter(Boolean).join(',') }})",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ idea_used_at: new Date().toISOString() }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        11248,
+        2992
+      ],
+      "id": "ce26ea81-a427-57de-902c-e14a5c4358fe",
+      "name": "Mark 7 Topics as Used",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "tableId": "n8n_chat_histories",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "session_id",
+              "fieldValue": "={{ $('Prepare Curation Inputs').first().json.chat_id }}"
+            },
+            {
+              "fieldId": "message",
+              "fieldValue": "={{ { \"type\": \"ai\", \"content\": JSON.stringify($('Build 7-Topic Digest').first().json.posts) } }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        11488,
+        2992
+      ],
+      "id": "c799e1cc-436c-5012-8a97-9435d23fa37c",
+      "name": "Save Topic Digest History",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('Format Telegram Topic Digest').first().json;\nconst recipients = [String(original.chat_id), '100000001'];\nconst unique = [...new Set(recipients.filter(id => id && /^-?\\d+$/.test(id)))];\nreturn unique.map(chatId => ({ json: { ...original, chat_id: chatId } }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        11744,
+        2992
+      ],
+      "id": "48f14669-09b4-594a-b86c-c5844380198c",
+      "name": "Add Recipients"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.text }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.button1_text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.button1_callback }}"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.button2_text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.button2_callback }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.button3_text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.button3_callback }}"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.button4_text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.button4_callback }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.button5_text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.button5_callback }}"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.button6_text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.button6_callback }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.button7_text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.button7_callback }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.button8_text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.button8_callback }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        12000,
+        2992
+      ],
+      "id": "8f35859a-59bf-523f-a7c1-6cd683011256",
+      "name": "Send Topic Digest to Telegram"
+    }
+  ],
+  "connections": {
+    "Manual: Build Topic Digest": {
+      "main": [
+        [
+          {
+            "node": "Get System Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scheduled Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get System Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Get System Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get System Settings": {
+      "main": [
+        [
+          {
+            "node": "Prepare Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Settings": {
+      "main": [
+        [
+          {
+            "node": "Prepare Curation Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Curation Inputs": {
+      "main": [
+        [
+          {
+            "node": "Get Posts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS: RBC",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS: Kommersant",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS: Interfax",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS: Vedomosti",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Posts": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Source Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Source Posts": {
+      "main": [
+        [
+          {
+            "node": "Get Chat History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Chat History": {
+      "main": [
+        [
+          {
+            "node": "Filter Used Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Used Posts": {
+      "main": [
+        [
+          {
+            "node": "AI Agent: Select 3 Database Topics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent: Select 3 Database Topics",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent: Select 3 Database Topics": {
+      "main": [
+        [
+          {
+            "node": "Parse 3 Database Topics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse 3 Database Topics": {
+      "main": [
+        [
+          {
+            "node": "Merge RSS and Database Topics",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "RSS: RBC": {
+      "main": [
+        [
+          {
+            "node": "Merge RSS Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS: Kommersant": {
+      "main": [
+        [
+          {
+            "node": "Merge RSS Feeds",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "RSS: Interfax": {
+      "main": [
+        [
+          {
+            "node": "Merge RSS Feeds",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "RSS: Vedomosti": {
+      "main": [
+        [
+          {
+            "node": "Merge RSS Feeds",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Merge RSS Feeds": {
+      "main": [
+        [
+          {
+            "node": "Parse RSS Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse RSS Items": {
+      "main": [
+        [
+          {
+            "node": "Perplexity: Select 4 RSS Topics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Perplexity: Select 4 RSS Topics": {
+      "main": [
+        [
+          {
+            "node": "Parse 4 RSS Topics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Perplexity Model via OpenRouter": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Perplexity: Select 4 RSS Topics",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse 4 RSS Topics": {
+      "main": [
+        [
+          {
+            "node": "Prepare RSS Topics for Storage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare RSS Topics for Storage": {
+      "main": [
+        [
+          {
+            "node": "Store 4 RSS Topics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store 4 RSS Topics": {
+      "main": [
+        [
+          {
+            "node": "Normalize 4 RSS Topics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize 4 RSS Topics": {
+      "main": [
+        [
+          {
+            "node": "Merge RSS and Database Topics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge RSS and Database Topics": {
+      "main": [
+        [
+          {
+            "node": "Build 7-Topic Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build 7-Topic Digest": {
+      "main": [
+        [
+          {
+            "node": "Format Telegram Topic Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Telegram Topic Digest": {
+      "main": [
+        [
+          {
+            "node": "Mark 7 Topics as Used",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark 7 Topics as Used": {
+      "main": [
+        [
+          {
+            "node": "Save Topic Digest History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Topic Digest History": {
+      "main": [
+        [
+          {
+            "node": "Add Recipients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Recipients": {
+      "main": [
+        [
+          {
+            "node": "Send Topic Digest to Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

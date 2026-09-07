@@ -1,0 +1,11 @@
+{
+  "secret": "SET_AT_RUNTIME",
+  "post": {
+    "ID": "sample-video-001",
+    "post_title": "Why a weekly cash-flow review matters",
+    "post_content": "A fictional business reviews expected inflows, overdue invoices, and upcoming payments every Monday. The process gives managers an earlier warning when liquidity risk increases.",
+    "post_status": "publish",
+    "link": "https://example.com/sample-video-source/"
+  }
+}
+
