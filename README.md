@@ -1,5 +1,7 @@
 # AI Content Operations Platform
 
+[![Workflow checks](https://github.com/kdromanovich/ai-content-operations-platform/actions/workflows/validate.yml/badge.svg)](https://github.com/kdromanovich/ai-content-operations-platform/actions/workflows/validate.yml)
+
 [Русская версия](README_RU.md) · [Architecture](docs/ARCHITECTURE.md) · [Setup](docs/SETUP.md) · [Data contracts](docs/DATA_CONTRACTS.md)
 
 A system of seven connected n8n workflows for collecting source material, preparing content, coordinating editorial approval, publishing articles, and distributing text and video across multiple channels.
